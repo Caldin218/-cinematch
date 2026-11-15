@@ -192,3 +192,10 @@ Blueprint: [overview](docs/PROJECT_OVERVIEW.md), [requirements](docs/REQUIREMENT
 
 Registration/login/logout, JWT access, refresh rotation, current-user and admin authorization dependencies are implemented; see [API contracts](docs/API.md). Generate JWT_SECRET (at least 32 random bytes) in ignored .env; the example placeholder is rejected. Install updated requirements.lock and rebuild backend images. For Windows local async PostgreSQL support run `python -m app.run`, which selects a compatible event loop. Docker uses Linux and its standard Uvicorn command. No refresh cookies are set; body-carried refresh tokens should remain in client memory. No frontend auth screens exist yet. Auth tests run with RUN_INTEGRATION=1 in disposable databases.
 
+
+
+## Phase 5 movie catalog
+
+Public listing/details/title-prefix search and genre reads, plus ADMIN movie and genre management, are implemented. Movies support genre/year/rating filters, descending popularity/rating/year sorting, bounded pagination and soft deletion. Genre reads use a validated Redis cache with a 60-second TTL and PostgreSQL fallback. Movie changes append transactional outbox records; workers and interaction APIs remain future phases. See [API contracts](docs/API.md) and [catalog architecture](docs/ARCHITECTURE.md).
+
+Run backend verification in PowerShell: `$env:RUN_INTEGRATION='1'; .\backend\.venv\Scripts\python -m pytest -q backend/tests`. PostgreSQL/Redis must be running; schema tests use disposable databases. No new dependencies or migration required for this phase. The running Docker backend must be rebuilt to expose these source changes.

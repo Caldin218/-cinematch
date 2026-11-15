@@ -223,3 +223,8 @@ References used for implementation: [SQLAlchemy PostgreSQL types/indexes](https:
 ## Phase 4 usage
 
 Auth uses users/refresh_tokens for registration, rotation, family revocation and live authorization. Stores Argon2id encodings and SHA-256 refresh hashes only. Consumed hashes remain for replay detection; rotation locks the owner and preserves absolute expiry. No migration required. See API.md for implemented behavior.
+
+
+## Phase 5 catalog query/index review
+
+No schema change or migration is necessary. Existing ix_movies_active_title_prefix (lower(title) text_pattern_ops) supports case-insensitive prefix searches with escaped literals; ix_movies_active_year supports active year filtering/order; ix_movie_genres_genre_movie supports genre EXISTS filtering. ix_ratings_movie_user and ix_movie_views_movie_time support aggregate source access by movie. Grouped rating/count and view/count subqueries avoid join multiplication; genre associations are batched. Aggregate rating/popularity ordering must compute and sort current values; no fabricated or denormalized score column/index is added. Performance at production data volume has not been benchmarked; materialized aggregates can be considered in a later measured optimization phase. Soft deletion preserves ratings/views/favorites/watchlists and movie_genres. Genre deletion remains RESTRICT while referenced. Row version serializes movie event order; outbox and movie mutation commit together.

@@ -54,3 +54,12 @@ Changes to approved decisions require a dated amendment describing the trigger, 
 ## Phase 4 decisions - 2026-11-15
 
 Use maintained argon2-cffi, PyJWT and email-validator for hashing/JWT/email validation. JSON-body opaque refresh tokens replace the earlier cookie proposal; memory-only clients sign in after reload. Rotation/logout lock the user row, retain consumed hashes and preserve absolute expiry. Reuse commits family revocation. Protected requests read current user status/role and live family. Redis limiting is atomic and fail-closed; proxy peer-IP sharing is documented. No schema migration, email pipeline or admin business endpoints added.
+
+
+## Phase 5 catalog decisions
+
+- Reuse the initial schema and indexes; no empty migration. Use prefix title search to match the existing PostgreSQL pattern index, documenting literal wildcard behavior.
+- Compute catalog rating as stored-rating mean and popularity as recorded view count. Keep these separate from future recommendation ranking.
+- Soft-delete movies to preserve historical foreign keys. Serialize writes with row locks and record versioned movie events in the existing transactional outbox. Event publishers/consumers remain future work.
+- Cache the small read-heavy genre list only, using validated values, 60-second TTL and best-effort invalidation. Explicitly accept bounded genre-list staleness rather than making catalog availability depend on Redis. No movie/page cache that could expose deleted movies.
+- Add admin genre create/rename/delete as required for genre management. Referenced genres return 409; renames preserve associations. Genre changes currently have no asynchronous downstream processing contract.

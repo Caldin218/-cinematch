@@ -412,3 +412,10 @@ Correlation middleware accepts UUID X-Request-ID or generates one, sets response
 ## Phase 4 authentication
 
 Auth module separates router, schemas, service, repository, security, limiter and dependencies. Users exposes the current-user view. Services own commits; repositories own queries and locks. Body-carried opaque refresh tokens supersede the original cookie proposal: no refresh cookie or cookie-CSRF flow. PostgreSQL owns session state; Redis atomically limits attempts. Existing schema suffices. Windows local launcher app.run selects a psycopg-compatible loop. See API.md for replay handling, expiry, authorization and deployment limitations.
+
+
+## Phase 5 catalog implementation
+
+Movies and Genres have separate router/schema/service/repository modules, reusing canonical models in app/models/catalog.py. Dependencies use the existing lifespan-owned async SQLAlchemy sessions and Redis. Routers only transport validated input and envelopes; admin routes share require_admin. Services own mutations, transaction commits, soft deletion, outbox creation and cache policy; repositories contain SQL.
+
+A listing uses independently grouped rating/view subqueries to prevent multiplying aggregates, EXISTS for genre filtering, a count, ordered page and one batched genre query. The statement count stays three for populated pages regardless of page size; detail uses two. Stable ID ties ensure deterministic ordering for unchanged data. READ COMMITTED count and rows may differ during concurrent writes; offset pages are not snapshot cursors. Writes lock movie rows and genre references. No new unmanaged connections or schema changes are introduced.

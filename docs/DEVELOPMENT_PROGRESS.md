@@ -298,3 +298,31 @@ Acceptance checklist:
 Existing Phase 1 audit findings remain open. Performance/Argon2 production hardware tuning, trusted proxy-aware client identity and browser persistence are not claimed. Tokens are not sent in cookies and token responses are no-store. No automatic ADMIN provisioning or new database schema was added.
 
 Phase 4 additional verification: compileall passed; pip check reported no broken requirements; documentation link/fence checks passed; generated signing key absent from scanned source/example/docs. Linux backend rebuild was attempted twice with `docker compose --progress plain build backend`; container PyPI access timed out and reported no available Mako==1.4.3 candidates while reinstalling the existing lockfile. This does not establish a dependency incompatibility. No Linux auth test or updated-container startup is claimed. Re-run the exact build command when container registry access is restored, then `docker compose run --rm --no-deps -e RUN_INTEGRATION=1 backend python -m pytest -q -o cache_dir=/tmp/pytest-phase4`. Existing running containers were not replaced by failed builds; use the updated local launcher for the new endpoints meanwhile. Packaging validation remains open; Windows real-service authentication behavior is verified by 72 passing tests.
+
+## Phase 5 movie catalog - 2026-11-15
+
+Implemented public movie listing/detail/title-prefix search, genre reads, ADMIN movie create/patch/soft-delete and genre create/rename/delete. Filters cover genre, exact release year and inclusive average-rating range; sorting covers actual view count, average rating and year with deterministic ID ties. Pagination uses the existing page envelope, max 100 items and max page 1,000,000. Schema/index review reuses existing prefix/year/genre and aggregate-source indexes; no migration needed.
+
+Files created: app/modules/movies/{__init__,router,schemas,repository,service}.py, app/modules/genres/{__init__,router,schemas,repository,service}.py and tests/test_catalog.py. Modified app/main.py to register routers, README.md, docs/API.md, ARCHITECTURE.md, DATABASE.md, DECISIONS.md, EVENT_FLOW.md and this progress checklist. No frontend, dependencies or unrelated modules changed.
+
+Architecture: async DI and repository SQL; services own transactions and cache policy. Movie writes lock rows, increment versions and commit outbox events atomically. Ratings/views are aggregated independently; one batched genre query prevents N+1. Genre assignments lock referenced genre rows; missing genres reject writes. Genre uniqueness/reference conflicts return 409. Redis caches only genre lists for 60 seconds with validated payloads, best-effort invalidation and fail-open PostgreSQL fallback.
+
+Verification commands (PowerShell, repository root):
+- `$env:RUN_INTEGRATION='1'; .\backend\.venv\Scripts\python -m pytest -q backend/tests/test_catalog.py`: initial 5 passed.
+- `$env:RUN_INTEGRATION='1'; .\backend\.venv\Scripts\python -m pytest -q backend/tests`: **77 passed**, one upstream TestClient/httpx deprecation warning, 113.86 seconds. Real PostgreSQL/Redis; disposable migrated databases. Includes authorization on every admin route, filter/sort/pagination, invalid IDs/bodies, soft-delete visibility, genre conflicts, persisted movie event versions, cache hit/corruption/outage, and exactly three listing SQL statements with multiple movies.
+- `.\backend\.venv\Scripts\python -m compileall -q backend/app backend/tests`: passed.
+- `.\backend\.venv\Scripts\python -m pip check`: no broken requirements.
+- Final targeted rerun after adding a page upper bound: result recorded below.
+
+Acceptance checklist:
+- [x] Public catalog reads and admin movie/genre management implemented.
+- [x] Filters, stable sorting, pagination, validation and authorization tested.
+- [x] Independent aggregates and batched genres prevent join multiplication/N+1.
+- [x] Redis caching and degraded-cache behavior tested.
+- [x] Existing schema/indexes reviewed; outbox state persisted with movie writes.
+- [x] API, architecture, data/event decisions and README updated.
+- [ ] User phase acceptance.
+
+Limitations: prefix search rather than substring/fuzzy search; aggregate sorts are computed live and have no production-volume benchmark; count/page use READ COMMITTED and can differ during concurrent writes. Genre-list invalidation/read-fill races or Redis outages permit bounded stale data until TTL after fill. Movie reads always query PostgreSQL. No restore endpoint, catalog UI, interaction writes, publisher or worker is implemented in this phase. Pending outbox rows are intentionally retained. Existing Phase 1 audit and Phase 4 Docker packaging limitations remain open; no updated Linux image/startup claim. No configured lint/static type checker exists; compilation is not a substitute for static checking. Frontend unchanged, so its build was not rerun.
+
+Final page-bound/catalog rerun: **5 passed**, one upstream warning, 36.48 seconds. Includes the added oversized-page rejection and the real SQL statement-count assertion. Final source compilation also passed.
