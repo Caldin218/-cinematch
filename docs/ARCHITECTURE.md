@@ -4,6 +4,8 @@ Status: Phase 0 target blueprint with Phase 1 local foundation implemented. API.
 
 Phase 1 operational amendment: `/health` is the canonical liveness route with `/health/live` as an alias. `/health/ready` checks both PostgreSQL and Redis; schema compatibility and Redis-degraded readiness are deferred. Local Compose has four services only. Nginx serves the compiled SPA and proxies `/api/*`; TLS and public ingress hardening are deferred.
 
+Phase 2 database amendment: [DATABASE.md](DATABASE.md) is authoritative for the implemented twelve-table schema and ERD. Users use UUID and movies use BIGINT identities. Separate user_favorites/watchlists, processed_events, refresh_tokens and per-user replacement recommendations supersede the corresponding physical-table sketches below. Snapshot runs, jobs, watched state and audit/recovery tables remain future migrations. No API, worker or algorithm is implemented by adding schema. Phase 1 audit remediation remains open.
+
 ## System structure
 
 ```mermaid
@@ -69,7 +71,7 @@ PUT/DELETE state operations return the resulting state/204 and emit events only 
 
 ## Database blueprint
 
-UUID primary keys unless otherwise stated; timezone-aware UTC timestamps. Foreign keys and indexes are required, not just application validation. All changes arrive through Alembic in future phases.
+The following is the original Phase 0 target sketch, retained for design history. Use DATABASE.md for current keys/types, constraints and entities; do not generate migrations from this sketch. Foreign keys/indexes are required and every schema change uses Alembic.
 
 | Entity | Main attributes and integrity rules |
 | --- | --- |

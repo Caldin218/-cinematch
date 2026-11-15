@@ -1,6 +1,6 @@
 # CineMatch
 
-CineMatch is a movie discovery graduation project focused on backend engineering and reliable event processing. Phase 1 provides the monorepo foundation: a React health page, FastAPI, PostgreSQL, Redis, Alembic scaffolding and tests. Business modules and workers are not implemented.
+CineMatch is a movie discovery graduation project focused on backend engineering and reliable event processing. Phase 1 provides the React/FastAPI foundation. Phase 2 adds twelve PostgreSQL tables, typed SQLAlchemy models, an initial Alembic migration and schema tests. Business APIs, event workers and recommendation algorithms are not implemented. The Phase 1 quality audit remains open; see [audit](docs/PHASE_1_AUDIT.md).
 
 ## Layout
 
@@ -24,6 +24,7 @@ Copy-Item .env.example .env  # First setup only; preserve an existing .env
 # Edit .env: replace POSTGRES_PASSWORD with a unique local password.
 docker compose config --quiet
 docker compose up -d --build --wait
+docker compose exec backend python -m alembic upgrade head
 docker compose ps
 ./scripts/smoke.ps1
 ```
@@ -43,6 +44,7 @@ python -m venv .venv
 ./.venv/Scripts/python -m pip install --upgrade pip
 ./.venv/Scripts/python -m pip install -r requirements.lock
 ./.venv/Scripts/python -m pip install --no-deps -e .
+./.venv/Scripts/python -m alembic upgrade head
 ./.venv/Scripts/python -m uvicorn app.main:app --reload
 ```
 
@@ -66,9 +68,10 @@ $env:RUN_INTEGRATION='1'
 ./.venv/Scripts/python -m pytest -q
 Remove-Item Env:RUN_INTEGRATION
 ./.venv/Scripts/python -m alembic history
+./.venv/Scripts/python -m alembic check
 ```
 
-The default test run isolates health/failure tests and skips the real-services test. The integration flag uses configured PostgreSQL/Redis and exercises SQL SELECT 1 and Redis PING through readiness.
+The default run passes isolated health/model checks and skips real-service checks. RUN_INTEGRATION=1 also runs fifty schema tests against uniquely named disposable PostgreSQL databases, plus the real-service health test. The database test role needs CREATEDB and access to database postgres. These tests never migrate/truncate/drop the configured development database; temporary databases are created empty and cleaned up. See [schema, ERD and indexes](docs/DATABASE.md).
 
 From `frontend/`, with the full stack running:
 
@@ -83,7 +86,7 @@ From repository root, `./scripts/smoke.ps1` checks liveness, dependency readines
 
 ## Contracts and limitations
 
-GET `/health` (alias `/health/live`) is dependency-independent liveness. GET `/health/ready` returns 200 only when PostgreSQL and Redis respond; otherwise it returns 503 with safe per-dependency statuses. Phase 1 uses strict readiness. No application schema exists; Alembic is initialized without revisions. Future schema changes require migrations; startup never calls create_all.
+GET `/health` (alias `/health/live`) is dependency-independent liveness. GET `/health/ready` returns 200 only when PostgreSQL and Redis respond; otherwise it returns 503 with safe per-dependency statuses. Readiness does not yet validate schema revision. Apply migration 0001_initial_schema explicitly; startup never migrates or calls create_all. Future schema changes require additional migrations.
 
 The local stack has no TLS, authentication, Redis password, workers or production monitoring. Ports bind to loopback and the backend runs as non-root. Python dependencies are pinned in requirements.lock (including test tools for foundation verification); npm uses package-lock.json. Base images use version tags rather than immutable digest pins. TestClient emits an upstream httpx deprecation warning; tests remain functional.
 
