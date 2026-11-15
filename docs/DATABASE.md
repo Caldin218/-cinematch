@@ -248,3 +248,15 @@ and last-success generation metadata. User FK cascades; a due index supports cla
 Existing rows remain valid. Rows and completed metadata replace atomically; empty
 generations retain job metadata. Downgrade discards derived hybrid rows before
 restoring the old constraint, preserving user interactions and ratings.
+
+### User portal schema (0005_user_portal)
+
+Movies add nullable original_title (varchar 255) and trailer_youtube_id (varchar 11).
+Official trailer IDs are supplied through existing admin catalog writes; no sample
+IDs are invented for existing catalog records. `movie_comments` stores bigint ID,
+movie/user foreign keys, validated body and timezone-aware created_at; its
+(movie_id, created_at DESC, id DESC) index supports newest-first pagination.
+`comment_likes` has composite primary key (comment_id, user_id), enforcing one
+heart per user per comment. Both tables cascade with hard parent deletion; APIs
+also reject writes/reads against soft-deleted movies. Recommendation scoring is
+unchanged by comments. Apply `alembic upgrade head` before using the portal API.

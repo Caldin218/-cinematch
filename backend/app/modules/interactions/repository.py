@@ -74,3 +74,11 @@ class InteractionRepository:
             model.created_at.label("added_at")).join(Movie, Movie.id == model.movie_id).where(model.user_id == user_id)
             .order_by(model.created_at.desc(), model.movie_id).offset(page.offset).limit(page.page_size))).all()
         return rows, int(total or 0)
+
+    async def movie_state(self, user_id: UUID, movie_id: int):
+        rating = await self.session.scalar(select(Rating.value).where(Rating.user_id == user_id, Rating.movie_id == movie_id))
+        async def contains(model):
+            return bool(await self.session.scalar(select(select(model.movie_id).where(model.user_id == user_id,
+                model.movie_id == movie_id).exists())))
+        return {"rating": float(rating) if rating is not None else None, "favorite": await contains(UserFavorite),
+            "watchlist": await contains(Watchlist), "watched": await contains(MovieView)}

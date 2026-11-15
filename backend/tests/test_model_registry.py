@@ -6,7 +6,7 @@ from app.core.database import Base
 
 
 def test_registry_and_key_types_without_database():
-    assert len(Base.metadata.tables) == 13
+    assert len(Base.metadata.tables) == 15
     assert isinstance(models.User.__table__.c.id.type, UUID)
     assert isinstance(models.Movie.__table__.c.id.type, BigInteger)
     for table in Base.metadata.tables.values():

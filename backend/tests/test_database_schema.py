@@ -23,7 +23,7 @@ from app.core.database import Base
 TABLES = {
     "users", "movies", "genres", "movie_genres", "ratings", "movie_views",
     "user_favorites", "watchlists", "outbox_events", "processed_events",
-    "recommendations", "recommendation_jobs", "refresh_tokens",
+    "recommendations", "recommendation_jobs", "refresh_tokens", "movie_comments", "comment_likes",
 }
 INDEXES = {
     "uq_genres_name_lower", "ix_movies_active_year", "ix_movies_active_title_prefix",
@@ -34,7 +34,7 @@ INDEXES = {
     "ix_outbox_events_aggregate", "ix_outbox_events_occurred", "ix_processed_events_event",
     "ix_recommendations_movie", "ix_refresh_tokens_user", "ix_refresh_tokens_family",
     "ix_refresh_tokens_expires",
-    "ix_recommendation_jobs_due",
+    "ix_recommendation_jobs_due", "ix_movie_comments_movie_time",
 }
 pytestmark = [
     pytest.mark.integration,
@@ -111,7 +111,7 @@ def test_all_tables_types_constraints_and_indexes(migrated_engine):
     columns = {c["name"]: c for c in inspector.get_columns("movies")}
     assert isinstance(columns["id"]["type"], BigInteger)
     assert columns["id"]["identity"] is not None
-    checks = {"users": 7, "movies": 5, "genres": 2, "ratings": 2,
+    checks = {"movie_comments": 1, "users": 7, "movies": 5, "genres": 2, "ratings": 2,
               "outbox_events": 6, "processed_events": 1, "recommendations": 4, "refresh_tokens": 4}
     explicit_indexes = set()
     for table in TABLES:
@@ -137,7 +137,7 @@ def test_all_tables_types_constraints_and_indexes(migrated_engine):
         assert actual_uniques == expected_uniques
     assert explicit_indexes == INDEXES
     with migrated_engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0004_recommendation_jobs"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0005_user_portal"
         # Compare schema types, nullable flags, FKs, indexes and server defaults.
         context = MigrationContext.configure(connection, opts={"compare_server_default": True})
         assert compare_metadata(context, Base.metadata) == []

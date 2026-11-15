@@ -103,3 +103,25 @@ Pagination uses `{items,page,page_size,total}`, page 1-1,000,000, page_size 1-10
 For Phase 6, watched history is derived from explicitly recorded view observations; a view does not prove playback completion. No separate watched toggle/unwatch endpoint or rating delete/list endpoint is implemented. GET movie details does not record a view. Clients decide when to POST /view; watchlist and favorites remain independent, and viewing does not remove watchlist items. No frontend integration is implemented in this phase.
 
 Every actual interaction change appends an outbox record in its PostgreSQL transaction; repeated no-ops append none. Events remain pending for future publishing. Failed transactions leave no partial interaction, sequence increment or outbox row and use the standard error envelope. A client losing the response at commit time must reconcile/retry using the documented semantics; the API cannot guarantee whether a disconnected commit reached PostgreSQL.
+
+### Phase 12 portal additions
+
+All endpoints use the existing `{ "data": ... }` response envelope.
+
+- `GET /api/v1/movies`: `q` performs case-insensitive substring search across title,
+  original_title and synopsis (literal wildcard characters are escaped). Adds
+  `sort=match` using the authenticated user's persisted ranking scores; anonymous
+  users fall back to popularity. Other filters/page/page_size remain supported.
+- Movie read/admin write schemas add nullable `original_title` (max 255 characters)
+  and `trailer_youtube_id` (11 URL-safe characters). Reads add `comment_count`.
+- `GET /api/v1/interactions/movies/{id}` (authenticated): returns `rating` (nullable
+  0.5–5), `favorite`, `watchlist`, `watched` to hydrate portal interaction controls.
+- `GET /api/v1/movies/{id}/comments?page=1&page_size=20`: newest-first Page with
+  `id`, `movie_id`, `username`, `body`, `created_at`, `likes`, `liked`. Public reads
+  report liked=false; authenticated reads use the current user's state. No-store.
+- `POST /api/v1/movies/{id}/comments` (authenticated): `{ "body": "..." }`, trimmed
+  1–2000 characters. Returns the created comment with HTTP 201.
+- `POST /api/v1/comments/{id}/like` and `DELETE /api/v1/comments/{id}/like`
+  (authenticated): idempotent 204; each user can like each comment once.
+- Comments for inactive/missing movies and likes for their comments return 404.
+  The portal polls comments every 10 seconds; no WebSocket transport is introduced.

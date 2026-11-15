@@ -1,8 +1,10 @@
 from datetime import datetime, timezone
 from typing import Annotated
+
 from fastapi import Depends, Request
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.errors import ApplicationError
 from app.core.runtime import get_db
 from app.models import User
@@ -30,3 +32,10 @@ async def require_admin(user: Annotated[User, Depends(current_user)]) -> User:
     if user.role != "ADMIN":
         raise ApplicationError("forbidden", "Administrator access required", 403)
     return user
+
+
+async def optional_user(request: Request, session: Annotated[AsyncSession, Depends(get_db)],
+        credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)]) -> User | None:
+    if credentials is None:
+        return None
+    return await current_user(request, session, credentials)

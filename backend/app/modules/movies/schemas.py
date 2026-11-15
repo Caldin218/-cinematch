@@ -1,5 +1,15 @@
 from typing import Annotated, Literal
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, StringConstraints, field_validator, model_validator
+
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    HttpUrl,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
+
 from app.core.api import Pagination
 
 Identifier = Annotated[int, Field(gt=0, le=9223372036854775807)]
@@ -13,7 +23,7 @@ class CatalogQuery(Pagination):
     release_year: Year | None = None
     min_rating: float | None = Field(default=None, ge=0, le=5)
     max_rating: float | None = Field(default=None, ge=0, le=5)
-    sort: Literal["popularity", "rating", "release_year"] = "popularity"
+    sort: Literal["popularity", "rating", "release_year", "match"] = "popularity"
 
     @model_validator(mode="after")
     def rating_bounds(self) -> "CatalogQuery":
@@ -24,6 +34,8 @@ class CatalogQuery(Pagination):
 class MovieCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     title: Title
+    original_title: Title | None = None
+    trailer_youtube_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{11}$")
     synopsis: str | None = Field(default=None, max_length=20000)
     release_year: Year | None = None
     runtime_minutes: int | None = Field(default=None, gt=0, le=2147483647)
@@ -57,6 +69,9 @@ class MovieRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     title: str
+    original_title: str | None = None
+    trailer_youtube_id: str | None = None
+    comment_count: int = 0
     synopsis: str | None
     release_year: int | None
     runtime_minutes: int | None

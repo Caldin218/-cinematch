@@ -8,7 +8,9 @@ from app.models.recommendations import Recommendation, RecommendationJob
 from app.models.users import User
 
 __all__ = [
-    "User", "Movie", "Genre", "MovieGenre", "Rating", "MovieView",
+    "MovieComment", "CommentLike", "User", "Movie", "Genre", "MovieGenre", "Rating", "MovieView",
     "UserFavorite", "Watchlist", "OutboxEvent", "ProcessedEvent",
     "Recommendation", "RecommendationJob", "RefreshToken",
 ]
+
+from app.models.comments import CommentLike, MovieComment

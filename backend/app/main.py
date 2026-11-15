@@ -14,6 +14,7 @@ from app.core.logging import configure_logging
 from app.core.redis import create_redis_client
 from app.core.runtime import create_async_resources
 from app.modules.auth.router import router as auth_router
+from app.modules.comments.router import router as comments_router
 from app.modules.genres.router import router as genres_router
 from app.modules.interactions.router import router as interactions_router
 from app.modules.movies.router import router as movies_router
@@ -61,6 +62,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                            expose_headers=["X-Request-ID"])
     app.include_router(auth_router, prefix="/api/v1")
     app.include_router(users_router, prefix="/api/v1")
+    app.include_router(comments_router, prefix="/api/v1")
     app.include_router(movies_router, prefix="/api/v1")
     app.include_router(genres_router, prefix="/api/v1")
     app.include_router(interactions_router, prefix="/api/v1")

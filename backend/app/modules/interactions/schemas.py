@@ -4,6 +4,7 @@ from typing import Annotated
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
+
 from app.core.api import Pagination
 from app.modules.movies.schemas import Identifier
 
@@ -63,3 +64,9 @@ class CollectionRead(BaseModel):
     title: str
     is_active: bool
     added_at: datetime
+
+class MovieInteractionRead(BaseModel):
+    rating: float | None
+    favorite: bool
+    watchlist: bool
+    watched: bool

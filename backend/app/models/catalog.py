@@ -1,4 +1,17 @@
-from sqlalchemy import BigInteger, Boolean, CheckConstraint, ForeignKey, Identity, Index, Integer, SmallInteger, String, Text, func, text
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    ForeignKey,
+    Identity,
+    Index,
+    Integer,
+    SmallInteger,
+    String,
+    Text,
+    func,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -17,6 +30,8 @@ class Movie(TimestampMixin, Base):
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
+    original_title: Mapped[str | None] = mapped_column(String(255))
+    trailer_youtube_id: Mapped[str | None] = mapped_column(String(11))
     synopsis: Mapped[str | None] = mapped_column(Text)
     release_year: Mapped[int | None] = mapped_column(SmallInteger)
     runtime_minutes: Mapped[int | None] = mapped_column(Integer)

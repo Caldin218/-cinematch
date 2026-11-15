@@ -8,7 +8,16 @@ from app.core.runtime import get_db
 from app.models import User
 from app.modules.auth.dependencies import current_user
 from app.modules.interactions.schemas import (
-    CollectionRead, HistoryRead, InteractionPage, MovieInput, RatingInput, RatingRead, RatingValue, ViewInput, ViewRead,
+    CollectionRead,
+    HistoryRead,
+    InteractionPage,
+    MovieInput,
+    MovieInteractionRead,
+    RatingInput,
+    RatingRead,
+    RatingValue,
+    ViewInput,
+    ViewRead,
 )
 from app.modules.interactions.service import InteractionService
 from app.modules.movies.schemas import Identifier
@@ -82,3 +91,7 @@ async def watchlist_remove(movie_id: Identifier, user: CurrentUser, service: Ser
 @router.get("/watchlist", response_model=ApiResponse[Page[CollectionRead]])
 async def watchlist(user: CurrentUser, service: Service, page: Paging) -> ApiResponse[Page[CollectionRead]]:
     return ApiResponse(data=await service.collection(user.id, "watchlist", page))
+
+@router.get("/movies/{movie_id}", response_model=ApiResponse[MovieInteractionRead])
+async def movie_interactions(movie_id: Identifier, user: CurrentUser, service: Service):
+    return ApiResponse(data=await service.movie_state(user.id, movie_id))

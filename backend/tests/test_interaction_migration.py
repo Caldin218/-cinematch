@@ -40,7 +40,7 @@ def test_upgrade_preserves_integer_ratings_and_safe_downgrade():
                 command.downgrade(config,"0001_initial_schema")
             c.rollback()
             assert c.scalar(select(Rating.value)) == Decimal("0.50")
-            assert c.scalar(text("SELECT version_num FROM alembic_version")) == "0004_recommendation_jobs"
+            assert c.scalar(text("SELECT version_num FROM alembic_version")) == "0005_user_portal"
             c.execute(text("UPDATE ratings SET value=4"))
             c.execute(text("UPDATE users SET interaction_version=1"))
             c.commit()

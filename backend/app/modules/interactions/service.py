@@ -1,4 +1,3 @@
-from app.events.schema import new_event
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from uuid import UUID
@@ -8,10 +7,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.api import Page
 from app.core.errors import ApplicationError
+from app.events.schema import new_event
 from app.models import User
 from app.modules.interactions.repository import Collection, InteractionRepository
 from app.modules.interactions.schemas import (
-    CollectionRead, HistoryRead, InteractionPage, RatingInput, RatingRead, RatingValue, ViewInput, ViewRead,
+    CollectionRead,
+    HistoryRead,
+    InteractionPage,
+    RatingInput,
+    RatingRead,
+    RatingValue,
+    ViewInput,
+    ViewRead,
 )
 
 
@@ -104,3 +111,7 @@ class InteractionService:
         rows, total = await self.repo.collection(kind, user_id, page)
         return Page(items=[CollectionRead.model_validate(dict(row._mapping)) for row in rows],
             total=total, page=page.page, page_size=page.page_size)
+
+    async def movie_state(self, user_id: UUID, movie_id: int):
+        await self.require_movie(movie_id)
+        return await self.repo.movie_state(user_id, movie_id)

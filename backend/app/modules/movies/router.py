@@ -1,10 +1,19 @@
 from typing import Annotated
+
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.api import ApiResponse, Page
 from app.core.runtime import get_db
-from app.modules.auth.dependencies import require_admin
-from app.modules.movies.schemas import CatalogQuery, Identifier, MovieCreate, MovieUpdate, MovieRead
+from app.models import User
+from app.modules.auth.dependencies import optional_user, require_admin
+from app.modules.movies.schemas import (
+    CatalogQuery,
+    Identifier,
+    MovieCreate,
+    MovieRead,
+    MovieUpdate,
+)
 from app.modules.movies.service import MovieService
 
 router = APIRouter(tags=["movies"])
@@ -16,8 +25,9 @@ Service = Annotated[MovieService, Depends(get_service)]
 
 @router.get("/movies", response_model=ApiResponse[Page[MovieRead]])
 @router.get("/movies/search", response_model=ApiResponse[Page[MovieRead]])
-async def movies(service: Service, query: Annotated[CatalogQuery, Query()]) -> ApiResponse[Page[MovieRead]]:
-    return ApiResponse(data=await service.listing(query))
+async def movies(service: Service, query: Annotated[CatalogQuery, Query()], response: Response, user: Annotated[User | None, Depends(optional_user)]) -> ApiResponse[Page[MovieRead]]:
+    response.headers["Cache-Control"] = "no-store"
+    return ApiResponse(data=await service.listing(query, user.id if user else None))
 
 @router.get("/movies/{movie_id}", response_model=ApiResponse[MovieRead])
 async def movie(movie_id: Identifier, service: Service) -> ApiResponse[MovieRead]:

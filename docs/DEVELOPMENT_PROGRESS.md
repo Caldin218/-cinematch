@@ -30,7 +30,7 @@ Phase 10: Recommendation Integration
 
 Phase 11: Frontend Foundation
 
-Phase 12: User Portal Core
+Phase 12: User Portal Core - implemented and verified
 
 Phase 13: User Personalization
 
@@ -516,3 +516,78 @@ comments, favorites and vault state are session-local. Auth/social submission an
 personalized refresh are explicitly unavailable in this foundation preview.
 No community feed is present on auth pages. Backend integration, refresh-token
 rotation and durable discussion APIs remain outside this foundation implementation.
+
+## Phase 12 — User portal core pages
+
+Implemented `/` and `/discover` as the main discovery experience; `/movies/:id`
+provides the full overview, movie metadata and expanded drawer. `/login` and
+`/register` use a clean AuthLayout with URL-driven tabs and real auth submission.
+No feed appears on auth pages. Existing Phase 11 design and theme are preserved.
+
+- Axios/TanStack Query now load real genres, paginated catalog results and personal
+  recommendations. Search matches substrings in title, original title and synopsis;
+  filters support genre, release year and minimum rating (0–5). Sorting supports
+  personal Match Score, popularity, rating and release year. Filter changes reset
+  pagination; recommended movie IDs are hydrated through the movie detail API.
+- Horizontal MovieRowCard has poster/fallback artwork, community score (displayed
+  on a 10-point scale), actual ranking-score badge when supplied, 0.5–5 star rating,
+  persisted watchlist/favorites and mark-watched actions. Optimistic writes roll
+  back on failure and revalidate the server state. Watched is a one-way action
+  because the existing view API records immutable view history.
+- Inline drawer contains recommendation method, actual ranking/predicted scores,
+  generation/version metadata, official YouTube embed when metadata exists,
+  external YouTube link, durable comments, timestamps, initials avatars, heart
+  counts and reply mention/focus. Separate confidence estimates are unavailable
+  from the current recommendation engine and are explicitly labeled as such.
+- Refresh posts to the existing durable scheduling endpoint and polls until a new
+  ready generation arrives before reporting completion (2-minute UI wait limit).
+- Added modular comments router/service/repository/schemas with authenticated
+  writes, optional authenticated read state, idempotent unique likes and pagination.
+  Community updates poll every 10 seconds while the drawer is open.
+- Migration `0005_user_portal` adds nullable original title / YouTube ID metadata,
+  comment and comment-like tables. Admin movie create/update supports the fields.
+  Existing interaction events/outbox behavior is unchanged; comments are not inputs
+  to recommendation training and do not emit interaction recommendation events.
+- Fixed Vite/nginx proxies to preserve `/api/v1`; retained `/api/health/*` mapping.
+  Access tokens remain memory-only. Reloading requires signing in again; refresh
+  token rotation/session persistence remains a separate auth lifecycle task.
+
+Created: frontend/src/lib/portal.ts, frontend/tests/portal.spec.ts;
+backend/app/models/comments.py, backend/app/modules/comments/*,
+backend/alembic/versions/0005_user_portal.py, backend/tests/test_user_portal.py.
+Modified: frontend discovery/components/routes/styles/auth store/proxy configs;
+backend catalog/auth optional-user dependency/interaction read state/model registry;
+model/schema/migration regression expectations and portal documentation.
+
+Verification from repository root:
+- `npm --prefix frontend run build`: TypeScript and Vite production build passed.
+- `backend/.venv/Scripts/python -m pytest backend/tests -q`: initial default run
+  49 passed, 110 skipped (integration tests opt in).
+- `RUN_INTEGRATION=1 backend/.venv/Scripts/python -m pytest backend/tests/test_catalog.py
+  backend/tests/test_database_schema.py backend/tests/test_interaction_migration.py -q`:
+  56 passed with one outdated check-count assertion; updated the schema expectation.
+- `RUN_INTEGRATION=1 backend/.venv/Scripts/python -m pytest backend/tests/test_database_schema.py
+  backend/tests/test_interactions.py backend/tests/test_user_portal.py -q --tb=short`:
+  75 passed, including fresh migration/metadata comparison and migration round trip.
+- `RUN_INTEGRATION=1 backend/.venv/Scripts/python -m pytest backend/tests/test_user_portal.py -q`:
+  2 passed; validates persistent comments, idempotent likes, actor-specific liked
+  state, hidden movies, original-title/overview search and saved interaction state.
+- `FRONTEND_URL=http://localhost:5174 npx --prefix frontend playwright test --config
+  frontend/playwright.config.ts frontend/tests/portal.spec.ts --reporter=line`:
+  5 passed. Mocked browser contracts cover auth isolation, filters/pagination,
+  detail routing, drawer/trailer URL, reply focus, POST/PUT ratings, optimistic
+  rollback, refresh completion, comments and 390px mobile overflow.
+- Scoped Ruff and compileall passed. Desktop/mobile screenshots visually inspected.
+  Trailer URL/embed wiring is tested; external YouTube playback is not claimed.
+
+Database integration tests use isolated disposable databases. The existing
+application database and Docker services were not migrated/rebuilt by this phase.
+Before running this version against existing data, apply Alembic head and rebuild
+frontend/backend. Recommendation refresh completion requires the existing workers.
+
+Final verification: TypeScript/Vite build passed; all 7 Playwright tests passed
+(including existing health proxy tests). Default backend suite: 49 passed,
+112 skipped. The 75 real PostgreSQL/Redis regression tests above passed separately.
+Configured mypy for all six new comment source files passed. An earlier invocation
+without the project config surfaced existing unrelated auth/config/catalog errors;
+the new comments SQL boolean typing issue it also found was corrected.

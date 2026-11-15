@@ -228,3 +228,15 @@ from backend `.\.venv\Scripts\python -m app.events.worker recommendations`
 alongside publisher/consumer. See [freshness and consistency](docs/RECOMMENDATION.md)
 and [API contracts](docs/API.md). Defaults: 5-second batching, 300-second cache TTL.
 No new dependencies. Development database migration/deployment remains explicit.
+
+### User portal
+
+Phase 12 adds `/discover` (also the default `/`), `/movies/:id`, `/login` and
+`/register`. Discovery uses the live catalog and recommendation APIs; comments and
+interaction controls persist to PostgreSQL. Apply the latest migration before
+running: from `backend`, run `.venv/Scripts/python -m alembic upgrade head`.
+For the Compose app, use `docker compose build backend frontend`, then
+`docker compose run --rm backend alembic upgrade head`, followed by
+`docker compose up -d backend frontend`. Run the existing workers for asynchronous
+recommendation refreshes. See docs/DEVELOPMENT_PROGRESS.md for verification and
+current session/trailer/confidence limitations.

@@ -1,13 +1,17 @@
-from app.events.schema import new_event
 from collections.abc import Sequence
 from typing import Any
+from uuid import UUID
+
 from sqlalchemy.engine import Row
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.api import Page
 from app.core.errors import ApplicationError
+from app.events.schema import new_event
 from app.models import Movie
 from app.modules.movies.repository import MovieRepository
-from app.modules.movies.schemas import CatalogQuery, MovieCreate, MovieUpdate, MovieRead
+from app.modules.movies.schemas import CatalogQuery, MovieCreate, MovieRead, MovieUpdate
+
 
 class MovieService:
     def __init__(self, session: AsyncSession) -> None:
@@ -17,11 +21,11 @@ class MovieService:
     async def serialize(self, rows: Sequence[Row[Any]]) -> list[MovieRead]:
         genres = await self.repo.genres([row[0].id for row in rows])
         return [MovieRead.model_validate({**{name: getattr(row[0], name) for name in
-            ("id", "title", "synopsis", "release_year", "runtime_minutes", "poster_url", "version")},
-            "genres": genres[row[0].id], "average_rating": row[1], "rating_count": row[2], "popularity": row[3]}) for row in rows]
+            ("id", "title", "synopsis", "release_year", "runtime_minutes", "poster_url", "original_title", "trailer_youtube_id", "version")},
+            "genres": genres[row[0].id], "average_rating": row[1], "rating_count": row[2], "popularity": row[3], "comment_count": row[4]}) for row in rows]
 
-    async def listing(self, query: CatalogQuery) -> Page[MovieRead]:
-        rows, total = await self.repo.listing(query)
+    async def listing(self, query: CatalogQuery, user_id: UUID | None = None) -> Page[MovieRead]:
+        rows, total = await self.repo.listing(query, user_id)
         return Page(items=await self.serialize(rows), total=total, page=query.page, page_size=query.page_size)
 
     async def detail(self, movie_id: int) -> MovieRead:
