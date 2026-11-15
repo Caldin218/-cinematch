@@ -76,3 +76,7 @@ Use maintained argon2-cffi, PyJWT and email-validator for hashing/JWT/email vali
 ## Phase 8 — reliable consumers (2026-11-15)
 
 Keep processed_events uniqueness scoped to (consumer_group, event_id), preserving independent group delivery. Use Redis-owned per-entry retry metadata, PEL idle heartbeats and ownership-checked Lua quarantine/ACK on standalone Redis. Infrastructure outages retain pending work indefinitely with bounded exponential delay; deterministic invalid messages quarantine immediately and handler exceptions exhaust a configurable retry budget. PostgreSQL effects and receipts remain one transaction. No schema change.
+
+## Phase 9 â€” 2026-11-15
+
+Use sparse standard-library dictionaries instead of adding numerical libraries for this small explicit-rating workload. Use Bayesian popularity, overlap-shrunk mean-centered positive cosine neighbors, and fixed-scale normalized hybrid scoring. Use global chronological evaluation to avoid cross-user future leakage. Keep hybrid scores out of the legacy recommendation table pending a Phase 10 contract/migration. Cache neighbors only within a reused snapshot; replace engines after refresh.

@@ -410,3 +410,34 @@ Phase 8 acceptance checklist:
 - [x] Graceful admission stop, internal worker health and all six requested metrics.
 - [x] Failure-injection integration tests, full backend regression and recovery documentation.
 - [ ] User phase acceptance; no Phase 9 work started.
+
+
+## Phase 9 — recommendation engine — 2026-11-15
+
+Status: implementation and local verification complete; awaiting phase acceptance.
+
+- [x] Bayesian popularity from rating count, average and log-normalized views.
+- [x] Sparse user-item indexes, centered/shrunk cosine, lazy cached Top-K neighbors and weighted predictions.
+- [x] Normalized hybrid weights, rated-item exclusions, user/movie cold starts and popularity fallback.
+- [x] Separate data adapters, pure algorithm modules and offline evaluation; no complex ML or added dependencies.
+- [x] Deterministic metrics, global temporal split, leakage rejection and MovieLens 100K CLI.
+- [x] 19 deterministic engine tests passed; backend default suite: 42 passed, 101 skipped, one existing Starlette deprecation warning.
+- [x] Ruff passed for new engine/tests; mypy with backend/pyproject.toml passed for all nine engine files.
+- [x] Real MovieLens 100K run: MAE 0.837879, RMSE 1.041161, Precision@10 0.172414, Recall@10 0.049412; CF coverage 12.4%. Full details in RECOMMENDATION.md.
+- [x] README, architecture, decisions and algorithm documentation updated.
+- [ ] User accepts Phase 9 deliverables.
+
+Created backend/app/recommendation_engine/{__init__,config,data,loading,popularity,similarity,user_based_cf,hybrid,evaluation}.py and backend/tests/test_recommendation_engine.py.
+Updated README.md and docs/{RECOMMENDATION,ARCHITECTURE,DECISIONS,DEVELOPMENT_PROGRESS}.md.
+
+Commands run from repository root: `.\backend\.venv\Scripts\python -m pytest -q backend/tests`,
+`.\backend\.venv\Scripts\python -m pytest -q backend/tests/test_recommendation_engine.py`,
+`.\backend\.venv\Scripts\python -m ruff check backend/app/recommendation_engine backend/tests/test_recommendation_engine.py`,
+`.\backend\.venv\Scripts\python -m mypy --config-file backend/pyproject.toml backend/app/recommendation_engine`.
+MovieLens command from backend: `.\.venv\Scripts\python -m app.recommendation_engine.evaluation "$env:TEMP/cinematch-ml-100k-u.data"`.
+An initial mypy invocation without the backend config reported settings/plugin errors; the configured invocation passed.
+Integration tests requiring RUN_INTEGRATION=1 were not run; SQL adapter mapping was tested using a mocked session.
+
+Limitations: cold/sparse profiles reduce CF coverage; no production quality claim or tuned baseline comparison.
+Neighbor cache belongs to a snapshot and requires engine replacement after updates. No historical database replay.
+Next: Phase 10 API/worker integration and an explicit migration for hybrid persistence; no such schema/API changes in Phase 9.

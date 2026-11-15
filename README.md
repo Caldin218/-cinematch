@@ -209,3 +209,7 @@ Before running the updated backend, apply the new migration from backend: `.\.ve
 Verify from repository root in PowerShell: `$env:RUN_INTEGRATION='1'; .\backend\.venv\Scripts\python -m pytest -q backend/tests`. Tests use real PostgreSQL/Redis and disposable migrated databases. Watched history currently means recorded view observations; there is no separate completion/unwatch API.
 
 Phase 8 adds durable consumer retries, dead-letter quarantine, active-entry heartbeats and internal worker health/metrics. See [event recovery procedures](docs/EVENT_FLOW.md#phase-8-consumer-reliability).
+
+## Phase 9 recommendation engine
+
+Implemented sparse user-based CF, Bayesian popularity, hybrid ranking, cold-start fallback and temporal MovieLens evaluation. See [algorithm contracts and usage](docs/RECOMMENDATION.md#phase-9--implemented-engine-2026-11-15). API/worker integration remains Phase 10. No new dependencies or migration.

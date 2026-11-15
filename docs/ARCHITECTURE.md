@@ -446,3 +446,7 @@ sequenceDiagram
     end
     Note over P: Outbox publisher and Redis Streams consumers are future phases
 ```
+
+## Phase 9 recommendation engine
+
+`app/recommendation_engine` separates immutable sparse indexes and data adapters from popularity, centered similarity, lazy Top-K CF, hybrid ranking and offline evaluation. Engines are reused per snapshot; rebuild for changed input. SQL loading requires a caller-owned REPEATABLE READ transaction. No API, worker or persistence integration is added; see RECOMMENDATION.md for contracts and complexity.
