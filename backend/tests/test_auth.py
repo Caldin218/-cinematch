@@ -1,4 +1,6 @@
 import os
+import asyncio
+import sys
 import secrets
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
@@ -33,14 +35,14 @@ def client(database):
     config = get_settings().model_copy(update={"postgres_db": database.url.database,
         "jwt_secret": __import__("pydantic").SecretStr(secrets.token_urlsafe(48))})
     app = create_app(config)
-    app.user_middleware = [m for m in app.user_middleware if m.cls.__name__ != "CorrelationMiddleware"]
     # A unique test client IP preserves real limiter behavior without touching others' keys.
     ip = "audit-" + uuid4().hex
     app.dependency_overrides[get_limiter] = lambda: AuthLimiter(app.state.async_redis, ip)
     @app.get("/test/admin")
     async def admin(user=Depends(require_admin)):
         return {"role":user.role}
-    with TestClient(app) as client:
+    options = {"loop_factory": asyncio.SelectorEventLoop} if sys.platform == "win32" else {}
+    with TestClient(app, backend_options=options) as client:
         yield client
 
 
@@ -160,3 +162,24 @@ def test_limiter_dependency_outage_fails_closed(client):
     client.app.dependency_overrides[get_limiter] = lambda: AuthLimiter(unavailable,"test")
     response = client.post("/api/v1/auth/login",json={"email":"unknown@example.com","password":PASSWORD})
     assert response.status_code == 503 and "private" not in response.text
+
+
+def test_unknown_credentials_and_invalid_refresh(client):
+    response = client.post("/api/v1/auth/login", json={"email":uuid4().hex+"@example.com", "password":PASSWORD})
+    assert response.status_code == 401 and response.json()["code"] == "invalid_credentials"
+    response = client.post("/api/v1/auth/refresh", json={"refresh_token":secrets.token_urlsafe(48)})
+    assert response.status_code == 401
+
+
+def test_expired_refresh_and_absolute_rotation_deadline(client,database):
+    email, _ = register(client)
+    tokens = login(client,email)
+    with database.connect() as c:
+        expiry = c.scalar(select(RefreshToken.expires_at).where(RefreshToken.token_hash==token_hash(tokens["refresh_token"])))
+    rotated = client.post("/api/v1/auth/refresh",json={"refresh_token":tokens["refresh_token"]}).json()["data"]
+    with database.begin() as c:
+        new_expiry = c.scalar(select(RefreshToken.expires_at).where(RefreshToken.token_hash==token_hash(rotated["refresh_token"])))
+        assert new_expiry == expiry
+        now = datetime.now(timezone.utc)
+        c.execute(update(RefreshToken).where(RefreshToken.token_hash==token_hash(rotated["refresh_token"])).values(created_at=now-timedelta(days=2),expires_at=now-timedelta(days=1)))
+    assert client.post("/api/v1/auth/refresh",json={"refresh_token":rotated["refresh_token"]}).status_code == 401

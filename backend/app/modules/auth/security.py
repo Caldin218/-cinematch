@@ -26,7 +26,7 @@ def token_hash(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
 def signing_key(settings: Settings) -> str:
-    if settings.jwt_secret is None or len(settings.jwt_secret.get_secret_value().encode()) < 32:
+    if settings.jwt_secret is None or len(settings.jwt_secret.get_secret_value().encode()) < 32 or settings.jwt_secret.get_secret_value().startswith("replace-"):
         raise ApplicationError("auth_unavailable", "Authentication is not configured", 503)
     return settings.jwt_secret.get_secret_value()
 

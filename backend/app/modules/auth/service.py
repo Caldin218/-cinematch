@@ -46,9 +46,10 @@ class AuthService:
             # Perform the same Argon2 work even for unknown identities.
             await hash_password(data.password.get_secret_value())
             raise ApplicationError("invalid_credentials", "Invalid email or password", 401)
-        valid = await verify_password(user.password_hash, data.password.get_secret_value())
+        original_hash = user.password_hash
+        valid = await verify_password(original_hash, data.password.get_secret_value())
         user = await self.repo.user(user.id, lock=True)
-        if not valid or user is None or user.status != "active":
+        if not valid or user is None or user.status != "active" or user.password_hash != original_hash:
             raise ApplicationError("invalid_credentials", "Invalid email or password", 401)
         return await self.issue(user)
 

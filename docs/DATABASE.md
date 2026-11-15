@@ -219,3 +219,7 @@ No startup auto-migration exists. An operator must run Alembic before schema-dep
 No APIs, repositories, auth/token rotation, watched-state table, event failure/replay/job tables, recommendation jobs/history, audit tables, import IDs or triggers are implemented in this phase. Add those in authorized phases with migrations. Case folding uses PostgreSQL lower() under the database collation, not Unicode-special normalization. Identity sequences may have gaps. Family ownership, last-admin protection and cross-row aggregate locking require service transactions. Phase 1 audit findings—including runtime superuser privileges—remain open; the database tests' elevated role is not a production privilege design.
 
 References used for implementation: [SQLAlchemy PostgreSQL types/indexes](https://docs.sqlalchemy.org/en/20/dialects/postgresql.html) and [Alembic metadata registration/autogeneration](https://alembic.sqlalchemy.org/en/latest/autogenerate.html). Exact executed commands and results are in DEVELOPMENT_PROGRESS.md.
+
+## Phase 4 usage
+
+Auth uses users/refresh_tokens for registration, rotation, family revocation and live authorization. Stores Argon2id encodings and SHA-256 refresh hashes only. Consumed hashes remain for replay detection; rotation locks the owner and preserves absolute expiry. No migration required. See API.md for implemented behavior.

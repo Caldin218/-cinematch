@@ -50,3 +50,7 @@ Changes to approved decisions require a dated amendment describing the trigger, 
 - Historical ratings/views/recommendations restrict deletion; disposable membership/token rows can cascade. Catalog/user operations should deactivate/suspend by default. No general hard-delete/retention service is added.
 - Initial title indexing supports normalized prefix search without an extension. Arbitrary substring search needs a catalog-phase PostgreSQL index decision and migration; current indexes make no substring-performance claim.
 - Tests create and remove only their own randomly named databases, using CREATEDB on the local test cluster. Production runtime privilege separation remains the open Phase 1 audit finding; test administration privileges are not an endorsed production application role.
+
+## Phase 4 decisions - 2026-11-15
+
+Use maintained argon2-cffi, PyJWT and email-validator for hashing/JWT/email validation. JSON-body opaque refresh tokens replace the earlier cookie proposal; memory-only clients sign in after reload. Rotation/logout lock the user row, retain consumed hashes and preserve absolute expiry. Reuse commits family revocation. Protected requests read current user status/role and live family. Redis limiting is atomic and fail-closed; proxy peer-IP sharing is documented. No schema migration, email pipeline or admin business endpoints added.
