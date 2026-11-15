@@ -125,3 +125,13 @@ Commands below run from backend/ unless otherwise indicated. Fresh tests use the
 The schema enables, but does not implement, event delivery/idempotent worker handlers, refresh rotation, account authorization, watched state or recommendations. Aggregate revisions, session family ownership and per-user replacement locking are future service responsibilities. Timestamp onupdate applies to SQLAlchemy updates; raw SQL/upserts set updated_at explicitly. Prefix title indexing does not accelerate arbitrary substring search. No load benchmark, backup restore or production privilege remediation was performed. Existing Phase 1 high/medium findings remain open, including superuser runtime DB credentials. No new dependency/lint/type tooling was introduced in this database-only phase.
 
 Wait for phase acceptance and the next phase-specific instruction; do not implement APIs automatically.
+
+## Phase 3 backend core — 2026-11-15
+
+Implemented async request database/Redis dependencies, explicit rollback-on-exit sessions, managed resource shutdown, error handling, response/pagination schemas, correlation middleware, structured application/server logging, configured CORS methods/headers and versioned health aliases. Health module layout is introduced with compatibility facades over existing core probes. Database schema and frontend are unchanged.
+
+Targeted command: backend/.venv/Scripts/python -m pytest -q backend/tests/test_backend_core.py backend/tests/test_health.py — 10 passed, one upstream httpx deprecation warning. Tests exercise response/errors, correlation, pagination, async request rollback and Redis/engine shutdown in addition to existing dependency health cases. Full integration results are recorded after execution below.
+
+Remaining limits: health adapters remain synchronous in FastAPI worker threads; existing Phase 1 UI/proxy/privilege findings are not resolved. No business modules or APIs, streaming response recovery, load measurements or production deployment claimed.
+
+Full regression command: RUN_INTEGRATION=1 backend/.venv/Scripts/python -m pytest -q backend/tests â€” 62 passed, one upstream TestClient/httpx warning. Includes real PostgreSQL/Redis readiness and isolated migration tests. Async lifecycle tests use mocks; real async transaction and concurrent-request tests remain a coverage limitation.

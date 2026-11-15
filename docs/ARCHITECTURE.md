@@ -193,3 +193,13 @@ Monitor outbox oldest age >60 seconds for 5 minutes, quarantine count >0 immedia
 ## Future documentation decomposition
 
 This Phase 0 blueprint contains the initial database, API, event, recommendation and deployment contracts. Future implementation phases will expand these into `DATABASE.md`, `API.md`, `EVENT_FLOW.md`, `RECOMMENDATION.md` and `DEPLOYMENT.md` with actual schemas, OpenAPI examples, commands and verified operational procedures. Those files are not represented as implemented deliverables now.
+
+## Phase 3 backend core
+
+Operational module layout is app/modules/health/{router,service,repository,schemas}. Existing core probes and compatibility imports are retained; no empty business modules are generated. Future modules own router.py (transport), service.py (transactional use cases), repository.py (data access), schemas.py and models.py where applicable. Current mapped database entities remain registered in app/models; do not duplicate their mappings.
+
+Async request dependencies live in core/runtime.py. get_db yields an AsyncSession and rolls back unfinished work on exit; services explicitly own commits. get_redis returns the lifespan-owned async Redis client. SQLAlchemy uses psycopg async support, not a new driver dependency. Synchronous adapters remain for Alembic and existing health probes; sync health routes execute outside the event loop. No connection opens at module import.
+
+/api/v1 is the business API namespace; versioned health aliases exist alongside unversioned operational endpoints. ApiResponse[T] uses data; Page[T] uses items/page/page_size/total. Health retains its existing operational format. Pagination validates page >=1 and page_size 1–100. Error responses use code/message/details/request_id; validation excludes raw input. Unexpected pre-response exceptions return sanitized 500. Streaming exceptions after headers propagate rather than attempting a second response.
+
+Correlation middleware accepts UUID X-Request-ID or generates one, sets response headers, scopes a ContextVar and resets it on exit. Structured logging includes correlation/status and configures Uvicorn propagation. CORS allows configured origins and explicit methods/headers and exposes the request ID. Async connections close through nested finally blocks. Readiness currently probes PostgreSQL/Redis using retained synchronous adapters; aggregate health execution deadlines and production privilege separation remain open audit work.

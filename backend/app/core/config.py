@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     postgres_port: int = Field(default=5432, ge=1, le=65535)
     redis_url: SecretStr
     cors_origins: list[str] = []
+    jwt_secret: SecretStr | None = None
+    jwt_issuer: str = "cinematch"
+    jwt_audience: str = "cinematch-api"
+    access_token_minutes: int = Field(default=15, ge=1, le=60)
+    refresh_token_days: int = Field(default=7, ge=1, le=30)
 
     @property
     def database_url(self) -> URL:
