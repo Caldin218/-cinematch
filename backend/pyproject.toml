@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.3,<9", "httpx>=0.28,<1"]
+dev = ["pytest>=8.3,<9", "httpx>=0.28,<1", "ruff>=0.17,<1", "mypy>=2.4,<3", "types-redis>=4.6,<5"]
 
 [tool.setuptools.packages.find]
 include = ["app*"]
@@ -23,3 +23,13 @@ include = ["app*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = ["integration: requires real PostgreSQL and Redis"]
+
+[tool.ruff]
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
+
+[tool.mypy]
+follow_imports = "silent"
+plugins = ["pydantic.mypy"]

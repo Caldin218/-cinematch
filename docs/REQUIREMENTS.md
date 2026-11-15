@@ -10,7 +10,7 @@ Status: proposed; requirement IDs remain stable across implementation phases.
 | FR-02 | Refresh rotates the refresh token; logout revokes the session; suspended accounts cannot authenticate or use existing sessions. Users view and update their own display name and password, with current-password verification for password changes. |
 | FR-03 | Browse active movies with pagination, case-insensitive title search, genre and release-year filters, and deterministic title/release-date/popularity sorting. Combined filters work together. |
 | FR-04 | Movie details display metadata and genres; inactive movies are unavailable to ordinary users. A detail-page visit records a best-effort view only after successful detail retrieval; view failure never blocks reading. |
-| FR-05 | Create, change and remove an integer rating from 1 to 5. Store at most one current rating per user/movie. A successful change atomically creates its outbox event. |
+| FR-05 | Create, change and remove an exact decimal rating from 0.50 to 5.00 (up to two decimal places). Store at most one current rating per user/movie. A successful change atomically creates its outbox event. |
 | FR-06 | Independently set/unset watched, favorite and watchlist status with idempotent PUT/DELETE operations; retries do not create duplicate state or change events. Watching does not silently remove a watchlist item. |
 | FR-07 | View and paginate own ratings, watched movies, favorites and watchlist. Other users' private collections are inaccessible. |
 | FR-08 | Receive recommendations excluding inactive, watched and already-rated movies. Use collaborative predictions when supported, otherwise real popularity values. Return method, generation time and fallback reason without exposing neighbors' identities. Empty eligible catalog returns an empty list. |
@@ -75,3 +75,5 @@ These are proposed test gates on a documented single-host evaluation environment
 | Operations | Compose startup/readiness, worker restart, unavailable Redis/DB, backup restore, migrations and last-successful recommendation preservation. |
 
 Tests must exercise failure boundaries with controlled process stops/fault injection. Report exact commands and actual outcomes per implementation phase. No executable tests exist in Phase 0; documentation validation is the only current check.
+
+Phase 6 implementation note: the requested interaction routes supersede FR-06 transport choices: favorites/watchlist use idempotent POST and DELETE. History groups explicitly recorded view events by movie; there is no separate watched toggle/unwatch endpoint in this phase. A detail GET does not record a view. Independent watched status, rating removal/listing, and client-side best-effort detail telemetry remain future scope.

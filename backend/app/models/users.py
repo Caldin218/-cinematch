@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import CheckConstraint, String, Text, text
+from sqlalchemy import BigInteger, CheckConstraint, String, Text, text
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -17,6 +17,7 @@ class User(TimestampMixin, Base):
         CheckConstraint("role IN ('USER', 'ADMIN')", name="role_allowed"),
         CheckConstraint("status IN ('active', 'suspended')", name="status_allowed"),
         CheckConstraint("updated_at >= created_at", name="timestamp_order"),
+        CheckConstraint("interaction_version >= 0", name="interaction_version_nonnegative"),
     )
 
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
@@ -25,3 +26,5 @@ class User(TimestampMixin, Base):
     display_name: Mapped[str] = mapped_column(String(100), nullable=False)
     role: Mapped[str] = mapped_column(String(16), nullable=False, server_default="USER")
     status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="active")
+
+    interaction_version: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default="0")

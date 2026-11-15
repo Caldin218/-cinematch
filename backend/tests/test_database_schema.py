@@ -110,7 +110,7 @@ def test_all_tables_types_constraints_and_indexes(migrated_engine):
     columns = {c["name"]: c for c in inspector.get_columns("movies")}
     assert isinstance(columns["id"]["type"], BigInteger)
     assert columns["id"]["identity"] is not None
-    checks = {"users": 6, "movies": 5, "genres": 2, "ratings": 2,
+    checks = {"users": 7, "movies": 5, "genres": 2, "ratings": 2,
               "outbox_events": 6, "processed_events": 1, "recommendations": 4, "refresh_tokens": 4}
     explicit_indexes = set()
     for table in TABLES:
@@ -136,7 +136,7 @@ def test_all_tables_types_constraints_and_indexes(migrated_engine):
         assert actual_uniques == expected_uniques
     assert explicit_indexes == INDEXES
     with migrated_engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0001_initial_schema"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0003_event_envelope"
         # Compare schema types, nullable flags, FKs, indexes and server defaults.
         context = MigrationContext.configure(connection, opts={"compare_server_default": True})
         assert compare_metadata(context, Base.metadata) == []
@@ -163,6 +163,7 @@ def test_uuid_bigint_and_timezone_roundtrip(db, entities):
 @pytest.mark.parametrize("values", [
     {"email": "UPPER@example.com"}, {"email": " spaced@example.com"},
     {"display_name": " "}, {"password_hash": ""}, {"role": "ROOT"}, {"status": "deleted"},
+    {"interaction_version": -1},
 ])
 def test_user_checks(db, values):
     data = {"email": "valid@example.com", "display_name": "Valid", "password_hash": "test-hash"} | values

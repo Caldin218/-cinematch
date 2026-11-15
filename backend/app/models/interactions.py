@@ -1,7 +1,8 @@
 from datetime import datetime
+from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import BigInteger, CheckConstraint, DateTime, ForeignKey, Identity, Index, SmallInteger, UniqueConstraint, func
+from sqlalchemy import BigInteger, CheckConstraint, DateTime, ForeignKey, Identity, Index, Numeric, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -12,12 +13,12 @@ from app.models.common import CreatedAtMixin, TimestampMixin
 class Rating(TimestampMixin, Base):
     __tablename__ = "ratings"
     __table_args__ = (
-        CheckConstraint("value BETWEEN 1 AND 5", name="value_range"),
+        CheckConstraint("value BETWEEN 0.5 AND 5", name="value_range"),
         CheckConstraint("updated_at >= created_at", name="timestamp_order"),
     )
     user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), primary_key=True)
     movie_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("movies.id", ondelete="RESTRICT"), primary_key=True)
-    value: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    value: Mapped[Decimal] = mapped_column(Numeric(3, 2), nullable=False)
 
 
 Index("ix_ratings_movie_user", Rating.movie_id, Rating.user_id)

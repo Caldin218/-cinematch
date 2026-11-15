@@ -17,6 +17,7 @@ from app.modules.auth.router import router as auth_router
 from app.modules.users.router import router as users_router
 from app.modules.movies.router import router as movies_router
 from app.modules.genres.router import router as genres_router
+from app.modules.interactions.router import router as interactions_router
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -61,6 +62,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(users_router, prefix="/api/v1")
     app.include_router(movies_router, prefix="/api/v1")
     app.include_router(genres_router, prefix="/api/v1")
+    app.include_router(interactions_router, prefix="/api/v1")
     install_handlers(app)
     app.add_middleware(CorrelationMiddleware)
     app.include_router(router)

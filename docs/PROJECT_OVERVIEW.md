@@ -44,7 +44,7 @@ This sequence is a proposal for future phase instructions, not authorization to 
 
 - Single PostgreSQL database and single backend codebase; separate API and worker processes are deployment roles, not microservices.
 - Initial evaluation dataset: at most 10,000 users, 20,000 movies and 1,000,000 interactions. Sparse ratings may make popularity the dominant fallback.
-- Ratings use integer values 1–5, one current rating per user/movie. All timestamps are UTC; the UI localizes display.
+- Ratings use exact decimal values 0.50–5.00 (up to two decimal places), one current rating per user/movie. All timestamps are UTC; the UI localizes display.
 - No external paid service is required. Poster licensing, seed-data provenance, target hardware and public hosting remain to be confirmed before data import or deployment.
 - Account deletion/export and jurisdiction-specific retention obligations require a later explicit policy decision before public release. MVP supports account suspension and session revocation.
 

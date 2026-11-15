@@ -63,3 +63,12 @@ Use maintained argon2-cffi, PyJWT and email-validator for hashing/JWT/email vali
 - Soft-delete movies to preserve historical foreign keys. Serialize writes with row locks and record versioned movie events in the existing transactional outbox. Event publishers/consumers remain future work.
 - Cache the small read-heavy genre list only, using validated values, 60-second TTL and best-effort invalidation. Explicitly accept bounded genre-list staleness rather than making catalog availability depend on Redis. No movie/page cache that could expose deleted movies.
 - Add admin genre create/rename/delete as required for genre management. Referenced genres return 409; renames preserve associations. Genre changes currently have no asynchronous downstream processing contract.
+
+## Phase 6 interaction decisions
+
+- The phase request supersedes the original integer scale: exact NUMERIC(3,2), range 0.50-5.00, API precision at most two fractional places. No additional half-step restriction was requested; quarter-star values are valid. Recommendation score constraints share the new lower bound for future consistency.
+- POST rating creates (duplicate 409); PUT updates an existing own row, preserving creation time. Equal-value writes are no-ops. PostgreSQL uniqueness remains authoritative.
+- Require client UUIDs for view retry identity; reject conflicting reuse. Favorites/watchlist use idempotent state changes. History groups explicit view observations rather than introducing a redundant watched table. It is recorded-view history, not proof of movie completion. A separate watched/unwatch feature remains future scope.
+- Serialize writes per user, using a durable user interaction_version for outbox order. Add an Alembic migration rather than repurposing timestamps or deriving versions from retained outbox rows. Lock active movies against concurrent deactivation. This intentionally trades same-user throughput for simple correct transactions.
+- Keep private history/collection summaries after catalog soft deletion and allow membership removal. New interactions require an active movie; retrying an existing view UUID returns its prior result.
+- Append pending outbox events now; do not publish directly to Redis or introduce workers before the requested event-processing phase. Genre/catalog events retain their existing separate aggregate contracts.

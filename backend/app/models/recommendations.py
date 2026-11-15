@@ -17,8 +17,8 @@ class Recommendation(Base):
         CheckConstraint("length(btrim(algorithm_version)) > 0", name="algorithm_nonempty"),
         CheckConstraint("generated_at >= source_cutoff", name="generation_order"),
         CheckConstraint(
-            "(method = 'user_cf' AND predicted_rating BETWEEN 1 AND 5 AND predicted_rating IS NOT NULL AND popularity_score IS NULL) OR "
-            "(method = 'popularity' AND popularity_score BETWEEN 1 AND 5 AND popularity_score IS NOT NULL AND predicted_rating IS NULL) OR "
+            "(method = 'user_cf' AND predicted_rating BETWEEN 0.5 AND 5 AND predicted_rating IS NOT NULL AND popularity_score IS NULL) OR "
+            "(method = 'popularity' AND popularity_score BETWEEN 0.5 AND 5 AND popularity_score IS NOT NULL AND predicted_rating IS NULL) OR "
             "(method = 'catalog_fallback' AND predicted_rating IS NULL AND popularity_score IS NULL)",
             name="method_score_consistent",
         ),

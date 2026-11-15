@@ -1,6 +1,6 @@
-# PostgreSQL schema — Phase 2
+# PostgreSQL schema — through Phase 6
 
-Status: initial schema implemented; verification evidence is recorded in DEVELOPMENT_PROGRESS.md. This document is the authoritative implemented database contract. The Phase 0 entity sketch is a future architectural target, not the current physical schema. No business APIs, authentication services, event workers or recommendation algorithms are introduced here.
+Status: schema revisions 0001 and 0002 implemented; verification evidence is recorded in DEVELOPMENT_PROGRESS.md. This document is the implemented database contract. Authentication, catalog and interaction APIs use this schema; workers and recommendation algorithms remain future phases.
 
 ## Design and ownership
 
@@ -17,11 +17,11 @@ Initial revision: `0001_initial_schema`, file `backend/alembic/versions/0001_ini
 
 | Entity | Key and columns | Database-enforced integrity |
 | --- | --- | --- |
-| users | id UUID; email VARCHAR(320); password_hash TEXT; display_name VARCHAR(100); role/status; created_at/updated_at | Unique email; lowercase/trimmed email length 3–320; nonblank display name; nonempty hash; role USER/ADMIN; status active/suspended; ordered timestamps |
+| users | id UUID; email VARCHAR(320); password_hash TEXT; display_name VARCHAR(100); role/status; interaction_version BIGINT default 0; created_at/updated_at | Unique email; lowercase/trimmed email length 3–320; nonblank display name; nonempty hash; role USER/ADMIN; status active/suspended; interaction_version >=0; ordered timestamps |
 | movies | id BIGINT identity; title, optional synopsis/release_year/runtime_minutes/poster_url; is_active; version; timestamps | Nonblank title ≤255; known year 1888–9999; known runtime >0; version >0; ordered timestamps; unknown year/runtime remain NULL |
 | genres | id BIGINT identity; name VARCHAR(80); timestamps | Trimmed nonblank name; unique lower(name) expression index; ordered timestamps |
 | movie_genres | PK(movie_id, genre_id) | Both FKs; duplicate assignment impossible |
-| ratings | PK(user_id, movie_id); value SMALLINT; timestamps | Both FKs; integer 1–5; one current rating per pair; ordered timestamps |
+| ratings | PK(user_id, movie_id); value NUMERIC(3,2); timestamps | Both FKs; decimal 0.50–5.00; one current rating per pair; ordered timestamps |
 | movie_views | id BIGINT identity; user_id/movie_id; request_id UUID; viewed_at | Both FKs; UNIQUE(user_id, request_id) deduplicates a retried client visit while allowing future visits |
 | user_favorites | PK(user_id, movie_id); created_at | Both FKs; at most one favorite per pair |
 | watchlists | PK(user_id, movie_id); created_at | Both FKs; at most one watchlist entry per pair; separate from favorites |
@@ -42,6 +42,7 @@ erDiagram
         text password_hash
         varchar role
         varchar status
+        bigint interaction_version "nonnegative event sequence"
         timestamptz created_at
         timestamptz updated_at
     }
@@ -63,7 +64,7 @@ erDiagram
     RATINGS {
         uuid user_id PK,FK
         bigint movie_id PK,FK
-        smallint value "1 to 5"
+        numeric value "0.50 to 5.00"
         timestamptz updated_at
     }
     MOVIE_VIEWS {
@@ -193,7 +194,7 @@ Future consumers insert (consumer_group, event_id) and derived effects in **one 
 
 The current schema keeps one recommendation set per user, with no history table. Compute candidates before opening the write transaction; lock the user's users row to serialize concurrent replacements; DELETE that user's old rows and INSERT the new set in one transaction. Failure preserves the previous committed set. Unique user/rank and user/movie prevent duplicated ranks/movies. This replacement contract supersedes the earlier snapshot-run proposal for this foundation; historical runs/jobs require later migrations if requested.
 
-Each item has an algorithm version, source cutoff and generation time. user_cf requires predicted_rating in [1,5] and no popularity score; popularity requires popularity_score in [1,5] and no predicted rating; catalog_fallback requires both scores NULL. The constraint explicitly rejects missing method-specific scores despite SQL CHECK's NULL semantics. No combined score or fake preference score is generated. Eligibility against current watched/rated/active state remains future service behavior.
+Each item has an algorithm version, source cutoff and generation time. user_cf requires predicted_rating in [0.5,5] and no popularity score; popularity requires popularity_score in [0.5,5] and no predicted rating; catalog_fallback requires both scores NULL. The constraint explicitly rejects missing method-specific scores despite SQL CHECK's NULL semantics. No combined score or fake preference score is generated. Eligibility against current watched/rated/active state remains future service behavior.
 
 ## Apply and verify
 
@@ -228,3 +229,13 @@ Auth uses users/refresh_tokens for registration, rotation, family revocation and
 ## Phase 5 catalog query/index review
 
 No schema change or migration is necessary. Existing ix_movies_active_title_prefix (lower(title) text_pattern_ops) supports case-insensitive prefix searches with escaped literals; ix_movies_active_year supports active year filtering/order; ix_movie_genres_genre_movie supports genre EXISTS filtering. ix_ratings_movie_user and ix_movie_views_movie_time support aggregate source access by movie. Grouped rating/count and view/count subqueries avoid join multiplication; genre associations are batched. Aggregate rating/popularity ordering must compute and sort current values; no fabricated or denormalized score column/index is added. Performance at production data volume has not been benchmarked; materialized aggregates can be considered in a later measured optimization phase. Soft deletion preserves ratings/views/favorites/watchlists and movie_genres. Genre deletion remains RESTRICT while referenced. Row version serializes movie event order; outbox and movie mutation commit together.
+
+## Phase 6 migration and interaction transactions
+
+Current head is `0002_interactions`, following immutable `0001_initial_schema`. Migration 0002 widens ratings.value to NUMERIC(3,2) with a 0.5-5 CHECK, preserving all existing integer ratings exactly. The API rejects more than two fractional places before PostgreSQL can round them. Recommendation score checks are widened to the same lower bound so future predictions/popularity scores can represent the full input range; no algorithm is implemented here.
+
+users.interaction_version is a nonnegative BIGINT defaulting to zero, incremented under the user row lock only for actual interaction changes. It provides a durable per-user outbox sequence independent of event-retention policy. No new table/index is required: pair PKs support current ratings/memberships, view user/request uniqueness supports retry detection, user/time indexes support history and recent collection pages, and the existing outbox aggregate index supports sequence lookup. Total explicit indexes and FKs are unchanged; users now has one additional CHECK. Never reset interaction_version when pruning outbox rows.
+
+Apply `python -m alembic upgrade head` from backend before running the updated application; ORM user reads require the new column. Tests cover empty upgrade, metadata comparison, upgrade with existing integer data, compatible downgrade/re-upgrade, and downgrade rejection. Downgrade to 0001 is refused if fractional/sub-1 ratings, sub-1 recommendation scores or a positive interaction sequence would lose data; it never silently rounds ratings or resets a live sequence. Back up retained databases and use a forward fix if interaction data exists. Startup does not migrate automatically.
+
+POST rating uses INSERT ON CONFLICT DO NOTHING and 409 for an existing pair. PUT updates the current row under the user lock, preserves created_at and updates updated_at with database clock_timestamp(). The same value is a no-op. View UUID retries reuse the existing row. Membership insert/delete uses PostgreSQL conflict/RETURNING operations to distinguish actual changes from repeats. For each actual change, state, user sequence and outbox event commit or roll back together. History derives from views; there is no duplicated watched table. Personal list queries join movie summaries in a fixed statement count; inactive summaries are retained.

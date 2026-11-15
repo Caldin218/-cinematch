@@ -160,7 +160,7 @@ The following is the original Phase 0 target sketch, retained for design history
 
 | genres / movie_genres | unique normalized genre name; join composite PK(movie_id, genre_id); both FKs and reverse genre index |
 
-| ratings | composite UNIQUE(user_id,movie_id), value CHECK 1–5, timestamps; index movie_id for aggregation |
+| ratings | composite UNIQUE(user_id,movie_id), value NUMERIC(3,2) CHECK 0.50–5.00, timestamps; index movie_id for aggregation |
 
 | user_movie_states | composite PK(user_id,movie_id), watched/favorite/watchlist booleans, revision, updated_at; persistent lock/revision anchor shared with ratings; false states retained for ordering |
 
@@ -326,7 +326,7 @@ flowchart TD
 
 
 
-Only current explicit 1–5 ratings supply collaborative similarity. Views/favorites/watchlist are not converted into invented ratings. Watched status excludes candidates; favorites may supply a secondary tie-break only. Popularity uses current rating evidence:
+Only current explicit 0.50–5.00 ratings supply collaborative similarity. Views/favorites/watchlist are not converted into invented ratings. Watched status excludes candidates; favorites may supply a secondary tie-break only. Popularity uses current rating evidence:
 
 
 
@@ -346,7 +346,7 @@ Collaborative filtering uses a sparse user-rating matrix. Center each observed r
 
 
 
-Require at least 2 contributing neighbors; clamp predictions to [1,5]. Users need at least 5 current ratings to attempt collaborative filtering. Insufficient evidence/zero denominator falls back to popularity. Cold-start users, sparse movies and newly added movies follow the same explicit fallback rules.
+Require at least 2 contributing neighbors; clamp predictions to [0.5,5]. Users need at least 5 current ratings to attempt collaborative filtering. Insufficient evidence/zero denominator falls back to popularity. Cold-start users, sparse movies and newly added movies follow the same explicit fallback rules.
 
 
 
@@ -419,3 +419,30 @@ Auth module separates router, schemas, service, repository, security, limiter an
 Movies and Genres have separate router/schema/service/repository modules, reusing canonical models in app/models/catalog.py. Dependencies use the existing lifespan-owned async SQLAlchemy sessions and Redis. Routers only transport validated input and envelopes; admin routes share require_admin. Services own mutations, transaction commits, soft deletion, outbox creation and cache policy; repositories contain SQL.
 
 A listing uses independently grouped rating/view subqueries to prevent multiplying aggregates, EXISTS for genre filtering, a count, ordered page and one batched genre query. The statement count stays three for populated pages regardless of page size; detail uses two. Stable ID ties ensure deterministic ordering for unchanged data. READ COMMITTED count and rows may differ during concurrent writes; offset pages are not snapshot cursors. Writes lock movie rows and genre references. No new unmanaged connections or schema changes are introduced.
+
+## Phase 6 interactions
+
+The interactions module separates validated schemas, router, service and repository. Canonical models remain in app/models/interactions.py. Ratings, views, favorites and watchlists use the authenticated identity only. There is no user_id request parameter. Personal responses are no-store and are not cached in Redis.
+
+Mutation services lock the owning user with SELECT FOR UPDATE and refresh its ORM state, then obtain a SHARE lock on active movie rows for additions/rating changes/new views. Catalog soft deletion must wait for these writes. Locks always follow user then movie; user locking also coordinates with existing auth locks. Only actual changes increment users.interaction_version and append an outbox row in the same commit. Failures roll back membership/rating/view state, version and event together. Duplicate rating creation is a conflict; equal-value PUT and duplicate collection changes are no-ops. Concurrent writes for one user serialize; different users may write in parallel. This simple lock design prioritizes correctness over throughput for a university-scale workload; lock waiting is bounded by the existing PostgreSQL statement timeout. No performance target has been measured.
+
+Views have client-supplied UUID request identity scoped to the user. Replaying the same ID/movie returns the existing record, even if the movie was subsequently deactivated; reusing it for another movie returns 409. A new UUID means a new observation. History is one row per viewed movie with first/last timestamps and view count. History and collections retain deactivated movie summaries (is_active=false), allowing users to inspect history and remove memberships without exposing full unavailable catalog details. They use count plus one ordered joined/grouped page query, avoiding N+1. Offset pagination remains READ COMMITTED, without snapshot guarantees during concurrent changes.
+
+```mermaid
+sequenceDiagram
+    participant C as Authenticated client
+    participant S as Interaction service
+    participant P as PostgreSQL
+    C->>S: Validated command (view includes request UUID)
+    S->>P: Lock user; check retry/current state
+    S->>P: Lock active movie for a new interaction
+    S->>P: Write interaction + increment user sequence + append outbox
+    alt commit succeeds
+        P-->>S: COMMIT
+        S-->>C: Private response
+    else transaction fails
+        S->>P: ROLLBACK
+        S-->>C: Standard safe error
+    end
+    Note over P: Outbox publisher and Redis Streams consumers are future phases
+```

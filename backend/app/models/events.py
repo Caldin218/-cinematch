@@ -22,6 +22,8 @@ class OutboxEvent(Base):
 
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
     event_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    correlation_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False, server_default=text("gen_random_uuid()"))
     schema_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
     aggregate_type: Mapped[str] = mapped_column(String(50), nullable=False)
     aggregate_id: Mapped[str] = mapped_column(String(200), nullable=False)

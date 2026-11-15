@@ -50,10 +50,37 @@ Public reads require no token. Admin mutations require a live ADMIN bearer token
 
 Query parameters: `q` is a trimmed, case-insensitive title **prefix**, 1-255 characters; `%`, `_` and backslash are literal characters. `genre_id` is one positive BIGINT, `release_year` is 1888-9999, `min_rating`/`max_rating` are inclusive 0-5 bounds on average rating. Both rating bounds exclude unrated movies; min must not exceed max. Unknown genre filters yield an empty page. `sort` is popularity (default), rating or release_year, always descending with nulls last and ascending ID ties. `page` is 1-1,000,000 (bounded to prevent oversized OFFSET values); `page_size` defaults to 20, maximum 100. Pages beyond the end are empty and retain total. Search without q is equivalent to listing. Examples: `/api/v1/movies/search?q=alien&genre_id=2&min_rating=3&sort=rating&page_size=10`.
 
-Movie output: id, title, synopsis, release_year, runtime_minutes, poster_url, version, genres, average_rating (null if unrated), rating_count, popularity. Rating is the mean of actual stored 1-5 ratings; popularity is recorded movie-view count, zero for unseen movies. These are catalog aggregates, not recommendation predictions. GET does not record a view. Interaction writes belong to later phases.
+Movie output: id, title, synopsis, release_year, runtime_minutes, poster_url, version, genres, average_rating (null if unrated), rating_count, popularity. Rating is the mean of actual stored 0.50-5.00 ratings; popularity is recorded movie-view count, zero for unseen movies. These are catalog aggregates, not recommendation predictions. GET does not record a view. Interaction writes belong to later phases.
 
 Titles are trimmed 1-255 characters, synopsis at most 20,000, runtime positive signed INTEGER, poster_url HTTP/HTTPS, genre_ids at most 100 distinct existing positive BIGINTs. Unknown body fields are rejected. PATCH omission preserves fields; null clears nullable fields; title and genre_ids cannot be null. An empty genre_ids removes associations. Invalid input/IDs return 422; valid missing IDs return 404. Genre names are trimmed 1-80 characters, unique ignoring case (409 on duplicate). Deleting an assigned genre returns 409, including associations to soft-deleted movies. Soft deletion preserves historical references and hides movies from all public reads; no restore API in this phase.
 
 Movie mutations lock the row, increment version on update/delete and commit an outbox event in the same PostgreSQL transaction. Events movie.created/movie.updated/movie.deleted have schema_version=1, aggregate_type=movie, aggregate_id and aggregate_version; payload {movie_id,version}. Consumers must re-read PostgreSQL; delivery workers are not implemented in Phase 5.
 
 Genres use Redis cache-aside, 60-second TTL, database-scoped key `cinematch:genres:v1:<database>`, invalidated after genre mutation. Cache payloads are validated; malformed values and Redis failure fall back to PostgreSQL and emit safe warning logs. A failed invalidation or concurrent read-fill can leave genre names stale for at most the TTL after fill; movie reads always use PostgreSQL. Successful database commits are not reported as failed solely because cache invalidation fails. No dynamic catalog page caching is used.
+
+## Phase 6 user interactions
+
+All routes below are under `/api/v1/interactions` and require a live bearer token. Both USER and ADMIN manage only their own interactions. No body/query accepts user identity; unknown body fields return 422. Success uses `{data:...}` except 204 responses. Personal responses set Cache-Control:no-store.
+
+| Method / route | JSON request or query | Success |
+| --- | --- | --- |
+| POST /view | movie_id, request_id (client-generated UUID) | 200 data: id/movie_id/request_id/viewed_at; exact replay returns existing record |
+| POST /rating | movie_id, value | 201 data: movie_id/value/created_at/updated_at; duplicate pair 409 rating_exists |
+| PUT /rating/{movie_id} | value | 200 same rating shape; no current own rating 404 rating_not_found |
+| GET /history | page, page_size | 200 data: paginated grouped movie history |
+| POST /favorites | movie_id | 204; repeated add is a no-op |
+| DELETE /favorites/{movie_id} | none | 204; absent own membership is a no-op |
+| GET /favorites | page, page_size | 200 data: paginated own memberships |
+| POST /watchlist | movie_id | 204; repeated add is a no-op |
+| DELETE /watchlist/{movie_id} | none | 204; absent own membership is a no-op |
+| GET /watchlist | page, page_size | 200 data: paginated own memberships |
+
+Movie IDs are positive signed BIGINTs. Ratings are exact decimals from 0.50 through 5.00, with at most two fractional places (including half-star and quarter-star values); invalid/non-finite/boolean values return 422. Responses serialize value as a JSON number. PATCH is not used; PUT changes an existing own rating atomically, preserves created_at and does not create a row. Equal-value PUT returns the unchanged rating without a new outbox event. POST conflict preserves the original rating and returns 409; clients may use PUT after confirming intent.
+
+New views, new memberships and rating creation/updates require an active movie, otherwise 404 movie_not_found. View request_id is an explicit idempotency key scoped to the authenticated user. Retry the same UUID and movie after a timeout; never generate a new UUID just for a transport retry. Same UUID with another movie returns 409 view_request_conflict. A new UUID records a new observation even for the same movie. Replay of an existing view succeeds after movie deactivation; other new writes to deactivated movies fail. Unique constraints, transactions and user locking protect concurrent repeats. There is no claim of exactly-once event delivery.
+
+Pagination uses `{items,page,page_size,total}`, page 1-1,000,000, page_size 1-100 (default 20). History contains one item per recorded movie: movie_id/title/is_active/first_viewed_at/last_viewed_at/view_count, ordered by last_viewed_at descending then movie_id. Favorites/watchlist items contain movie_id/title/is_active/added_at, ordered by added_at descending then movie_id. Out-of-range pages are empty. Personal history and memberships retain inactive movie summaries; membership DELETE still works. Data from other users is never returned or changed. A DELETE for an absent/movie-unknown membership returns 204.
+
+For Phase 6, watched history is derived from explicitly recorded view observations; a view does not prove playback completion. No separate watched toggle/unwatch endpoint or rating delete/list endpoint is implemented. GET movie details does not record a view. Clients decide when to POST /view; watchlist and favorites remain independent, and viewing does not remove watchlist items. No frontend integration is implemented in this phase.
+
+Every actual interaction change appends an outbox record in its PostgreSQL transaction; repeated no-ops append none. Events remain pending for future publishing. Failed transactions leave no partial interaction, sequence increment or outbox row and use the standard error envelope. A client losing the response at commit time must reconcile/retry using the documented semantics; the API cannot guarantee whether a disconnected commit reached PostgreSQL.

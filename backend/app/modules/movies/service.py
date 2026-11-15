@@ -1,10 +1,11 @@
+from app.events.schema import new_event
 from collections.abc import Sequence
 from typing import Any
 from sqlalchemy.engine import Row
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.api import Page
 from app.core.errors import ApplicationError
-from app.models import Movie, OutboxEvent
+from app.models import Movie
 from app.modules.movies.repository import MovieRepository
 from app.modules.movies.schemas import CatalogQuery, MovieCreate, MovieUpdate, MovieRead
 
@@ -50,7 +51,7 @@ class MovieService:
         return await self.detail(movie.id)
 
     def event(self, movie: Movie, event_type: str) -> None:
-        self.session.add(OutboxEvent(event_type=event_type, aggregate_type="movie", aggregate_id=str(movie.id),
+        self.session.add(new_event(event_type=event_type, aggregate_type="movie", aggregate_id=str(movie.id),
             aggregate_version=movie.version, payload={"movie_id": movie.id, "version": movie.version}))
 
     async def delete(self, movie_id: int) -> None:

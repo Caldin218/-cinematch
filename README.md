@@ -199,3 +199,11 @@ Registration/login/logout, JWT access, refresh rotation, current-user and admin 
 Public listing/details/title-prefix search and genre reads, plus ADMIN movie and genre management, are implemented. Movies support genre/year/rating filters, descending popularity/rating/year sorting, bounded pagination and soft deletion. Genre reads use a validated Redis cache with a 60-second TTL and PostgreSQL fallback. Movie changes append transactional outbox records; workers and interaction APIs remain future phases. See [API contracts](docs/API.md) and [catalog architecture](docs/ARCHITECTURE.md).
 
 Run backend verification in PowerShell: `$env:RUN_INTEGRATION='1'; .\backend\.venv\Scripts\python -m pytest -q backend/tests`. PostgreSQL/Redis must be running; schema tests use disposable databases. No new dependencies or migration required for this phase. The running Docker backend must be rebuilt to expose these source changes.
+
+## Phase 6 user interactions
+
+Authenticated rating creation/update (0.50-5.00 exact decimals), UUID-deduplicated view recording, grouped watched/view history, favorites and watchlist management are implemented. All records belong to the authenticated user. Changes and pending outbox events commit atomically; repeated views/memberships and unchanged ratings do not add duplicate events. No Redis publishing or workers are introduced. See [interaction API contracts](docs/API.md), [event payloads](docs/EVENT_FLOW.md) and [schema changes](docs/DATABASE.md).
+
+Before running the updated backend, apply the new migration from backend: `.\.venv\Scripts\python -m alembic upgrade head` (Windows), followed by `.\.venv\Scripts\python -m alembic check`. Current head: 0002_interactions. For local async serving, `.\.venv\Scripts\python -m app.run`. Back up retained data first; downgrade rejects data it cannot preserve. Rebuild Docker images before using their application/migration commands.
+
+Verify from repository root in PowerShell: `$env:RUN_INTEGRATION='1'; .\backend\.venv\Scripts\python -m pytest -q backend/tests`. Tests use real PostgreSQL/Redis and disposable migrated databases. Watched history currently means recorded view observations; there is no separate completion/unwatch API.

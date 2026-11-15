@@ -13,7 +13,7 @@ Status: proposed Phase 0 behavior. Each journey references acceptance requiremen
 ## Record preferences and organize movies
 
 1. An authenticated user opens a movie; the client posts a deduplicated view UUID independently of the detail read.
-2. They rate it 1–5 or remove a rating, and independently toggle watched, favorite or watchlist status (FR-05/06).
+2. They create or update a rating from 0.50–5.00 (at most two decimal places), and independently add/remove favorite or watchlist status. Phase 6 history groups explicit recorded views; rating removal and a separate watched/unwatch toggle remain future features (FR-05/06).
 3. API success means state and its event are committed. The UI confirms server state and invalidates affected queries.
 4. If a request fails, optimistic UI rolls back and offers retry. Collection retries reuse the same desired state; view retries reuse the same UUID.
 5. Personal lists and statistics reflect committed PostgreSQL state immediately. Background projections may lag; their freshness is displayed where used (FR-07/09).

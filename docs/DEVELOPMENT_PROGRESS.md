@@ -326,3 +326,65 @@ Acceptance checklist:
 Limitations: prefix search rather than substring/fuzzy search; aggregate sorts are computed live and have no production-volume benchmark; count/page use READ COMMITTED and can differ during concurrent writes. Genre-list invalidation/read-fill races or Redis outages permit bounded stale data until TTL after fill. Movie reads always query PostgreSQL. No restore endpoint, catalog UI, interaction writes, publisher or worker is implemented in this phase. Pending outbox rows are intentionally retained. Existing Phase 1 audit and Phase 4 Docker packaging limitations remain open; no updated Linux image/startup claim. No configured lint/static type checker exists; compilation is not a substitute for static checking. Frontend unchanged, so its build was not rerun.
 
 Final page-bound/catalog rerun: **5 passed**, one upstream warning, 36.48 seconds. Includes the added oversized-page rejection and the real SQL statement-count assertion. Final source compilation also passed.
+
+## Phase 6 user interactions - 2026-11-15
+
+Implemented all requested /api/v1/interactions routes: view, rating create/update, grouped history, favorites and watchlist add/remove/list. Every route requires current_user; client-controlled user identity is rejected in bodies and never used for queries. Private responses are no-store. Existing models remain canonical; the new module separates router/schemas/service/repository without unmanaged connections or SQL in routers.
+
+Created: app/modules/interactions/{__init__,router,schemas,service,repository}.py, alembic/versions/0002_interactions.py, tests/test_interactions.py and tests/test_interaction_migration.py. Modified: app/main.py, app/models/{users,interactions,recommendations}.py and tests/test_database_schema.py for the new head/check. Documentation updated: README, API, DATABASE (including ERD), ARCHITECTURE, REQUIREMENTS, PROJECT_OVERVIEW, USER_FLOWS, DECISIONS, EVENT_FLOW, RECOMMENDATION, DEPLOYMENT and this checklist. No frontend or dependencies changed.
+
+Design: NUMERIC(3,2) supports exact 0.50-5.00 input with at most two decimal places. POST rating returns 409 for an existing pair; PUT preserves created_at and updates atomically, with equal-value PUT a no-op. View request UUIDs deduplicate per user; conflicting reuse returns 409. Favorites/watchlist insert/remove are idempotent and independent. History groups view observations rather than duplicating watched state. Inactive summaries remain available in private lists and removable from collections; new writes require active movies. Services lock users and active movies, increment a durable per-user sequence only for actual changes, and append outbox events in the same transaction. No stream publishing/workers were added.
+
+Verification commands/evidence:
+- `$env:RUN_INTEGRATION='1'; .\backend\.venv\Scripts\python -m pytest -q backend/tests/test_interactions.py -x`: first run 21 passed, 1 failed. Concurrent writes were consistent, but the assertion exposed decimal event formatting 2.5 versus 2.50. Event strings were standardized to exactly two places.
+- `$env:RUN_INTEGRATION='1'; .\backend\.venv\Scripts\python -m pytest -q backend/tests`: next run 100 passed, 1 failed during rating creation. Inspection found separate clock_timestamp() expressions could violate initial timestamp ordering. Initial rating timestamps now both use stable statement_timestamp(); an equality assertion covers this correction.
+- `$env:RUN_INTEGRATION='1'; .\backend\.venv\Scripts\python -m pytest -q backend/tests/test_interactions.py backend/tests/test_interaction_migration.py -x`: **23 passed**, one upstream TestClient/httpx warning, 139.51 seconds. Covers duplicate/create/update, decimal boundaries, no-ops, repeated views/conflicting UUIDs, history/pagination, inactive movies, both collections, own-user isolation, unauthorized access, malformed input, outbox insertion failures, pre-commit failures and concurrent requests. Migration tests preserve legacy integer data, exercise compatible downgrade/re-upgrade and reject fractional/live-sequence data loss.
+- `.\backend\.venv\Scripts\python -m compileall -q backend/app backend/alembic backend/tests`: passed.
+- `.\backend\.venv\Scripts\python -m pip check`: no broken requirements.
+- Source parsing and local documentation link/fence checks: passed.
+- Configured development database inspected without exposing secrets: revision 0001, zero users/ratings/views/favorites/watchlists/outbox rows. From backend, `.\.venv\Scripts\python -m alembic upgrade head`, `... -m alembic current`, `... -m alembic check` succeeded: **0002_interactions (head)**; no new upgrade operations detected. No retained interaction data was changed. Startup still does not auto-migrate.
+- Final full regression outcome is recorded below when it finishes.
+
+Acceptance checklist:
+- [x] Requested authenticated routes and own-user scoping implemented.
+- [x] Exact decimal scale and a real Alembic migration implemented and verified.
+- [x] Atomic rating updates, view retry identity and idempotent collection state tested.
+- [x] Business state, durable sequence and pending outbox commit/rollback together.
+- [x] Concurrent repeats and injected transaction failures covered against PostgreSQL.
+- [x] API/data/architecture/event/deployment docs and product scale updated.
+- [ ] Final full backend regression recorded.
+- [ ] User phase acceptance.
+
+Limitations: watched history is recorded views, not playback completion; no independent watched/unwatch or rating delete/list endpoint was requested here. API precision is at most two decimal places, with no half-step restriction. Same-user writes serialize under a row lock and may hit the existing statement timeout under contention; no throughput guarantee is claimed. READ COMMITTED count/page reads are not snapshots. Transport disconnects around COMMIT can have ambiguous outcomes; view clients must retry the same UUID. Pending events are retained for a future publisher; delivery/consumer recovery is not implemented. Existing Phase 1 audit and Linux-image packaging limitations remain open. No configured lint/static type checker exists; compilation and integration tests do not substitute for static analysis. Frontend is untouched and its build was not rerun.
+
+## Phase 6 independent quality audit — 2026-11-15
+
+Status: **changes required; phase completion withheld**. See [Phase 6 audit report](PHASE_6_AUDIT.md) for severity, source locations, reproductions, acceptance criteria and execution limits. No critical issue identified; two high-priority and four medium-priority issues remain.
+
+- [x] Full backend regression freshly executed: **101 passed**, one upstream warning, 252.87 seconds, with real PostgreSQL/Redis integration.
+- [x] Default backend run: **11 passed, 90 skipped**, one warning. Compilation and pip dependency consistency passed.
+- [x] Frontend application TypeScript/production build passed; existing Playwright health suite **2 passed**.
+- [x] Confirmed missing interaction limiting (61 views accepted in 1.62 seconds), 500 on unavailable DB/lock timeout, missing private error no-store headers and runtime DB superuser privileges.
+- [ ] H-01: interaction abuse limits and bounded admission implemented and verified.
+- [ ] H-02: separate least-privilege runtime database role provisioned and verified.
+- [ ] M-01 through M-04: error classification, private headers, static gates and safe diagnostics resolved or explicitly dispositioned.
+- [ ] Load/race/packaging checks and deferred product requirements accepted with accurate scope.
+- [ ] Quality acceptance after remediation and re-review.
+
+Only audit documentation is retained from this review. Temporary diagnostic tests were removed; application source, dependencies and existing implementation changes were preserved. The fresh 101-test result above supersedes the earlier pending full-regression placeholder; passing tests do not grant unconditional phase approval.
+
+## Phase 7 remediation — 2026-11-15
+
+Implemented producer-side contract validation, strict schema version checking, operator replay preserving event identity, supervised Compose worker services, corrected migration-head assertions, required Mermaid flow/recovery diagrams and operational instructions. New regressions exercise publisher crash after XADD, Redis failure, restart, duplicate publication, replay after stream loss, handler rollback, pending recovery, competing consumers, ACK failure, schema validation and graceful stop admission/cleanup.
+
+Verification is recorded below after the full regression run. Earlier Phase 6 statements that workers are future work describe the historical Phase 6 boundary and are superseded by Phase 7. Phase 6 abuse limits/runtime database privilege findings remain separate unresolved work; this phase does not claim to resolve them.
+
+Remaining operational limitations: operator-triggered recovery after Redis data loss, unbounded stream retention, poison entries retained pending manual remediation, no automated backlog metrics, no throughput/shutdown latency guarantee, and only PostgreSQL transactional handler effects covered by deduplication. Mypy is scoped to event modules with silent imported-module following; unannotated function bodies are not a complete strict typing guarantee. Graceful signal control is unit-tested; OS process termination during an actual network stall remains untested.
+
+Final event-only verification: **15 passed in 49.79 seconds**, with real PostgreSQL and Redis. Scoped Ruff checks, mypy with the Pydantic plugin, compileall, pip check and Compose workers configuration validation pass. Frontend `npm run build` passes (TypeScript and Vite, 146 modules). Initial full suite: 111 passed / 1 failed due to the now-corrected second stale migration-head assertion. Fresh full-suite result follows when finished.
+
+Changed in remediation: event schema/factory, publisher replay, CLI replay, handler annotations, producer factory calls in movie/interaction services, test_events.py, both migration-head assertions, pyproject tooling, Compose worker profile, EVENT_FLOW.md, DEPLOYMENT.md, PHASE_7_AUDIT.md and this progress record. Pre-existing unrelated changes remain preserved.
+
+Full backend integration regression after fixes: **114 passed, 1 upstream Starlette/httpx deprecation warning, 303.08 seconds**. Two subsequently added tests (signal cleanup and ambiguous XADD confirmation) are included in the final **15/15** event suite above. No application behavior changed after the full run beyond type annotations/producer factory cleanup, which the final event suite covers; interaction/catalog functional tests also completed successfully in the full run. All collected full-suite tests passed; no skipped integration tests in that run.
+
+Acceptance: **Phase 7 functional acceptance criteria verified with documented operational limitations**. No next-phase work started. Production throughput, OS kill under a stalled connection, automated quarantine and strict whole-backend typing remain outside this verification. Phase 6 audit findings remain open independently.
