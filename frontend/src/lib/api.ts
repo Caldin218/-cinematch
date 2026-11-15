@@ -14,3 +14,6 @@ export async function getReadiness(): Promise<Health> {
   })
   return data
 }
+import { useAuth } from '../store/auth'
+api.interceptors.request.use((config) => { const token = useAuth.getState().accessToken; if (token) config.headers.Authorization = `Bearer ${token}`; return config })
+api.interceptors.response.use(response => response, (error: unknown) => { if (axios.isAxiosError(error) && error.response?.status === 401) useAuth.getState().setToken(null); return Promise.reject(error) })

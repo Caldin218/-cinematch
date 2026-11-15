@@ -501,3 +501,18 @@ calculation failures, true hybrid persistence and API cache/rating behavior. Sco
 Ruff and mypy were rerun after the batching refinement and passed; final compileall
 and diff whitespace verification passed. Phase 10 implementation is complete;
 no next-phase work was started.
+
+## Phase 11 - frontend foundation
+
+Added cinematic theme tokens, responsive discovery preview, reusable movie rows,
+half-star poster ratings, refresh CTA, expandable local comment threads, UI states,
+focused auth layout, user layout and shadcn-compatible Button primitive. Added
+Lucide, Radix Slot, CVA, clsx and tailwind-merge. Axios attaches an in-memory JWT
+and clears authentication on 401; TanStack Query has shared freshness/retry defaults.
+
+Verification: npm run build (tsc -b and vite build) passed. No browser visual QA
+claimed. Discovery data and poster artwork are deliberate design placeholders;
+comments, favorites and vault state are session-local. Auth/social submission and
+personalized refresh are explicitly unavailable in this foundation preview.
+No community feed is present on auth pages. Backend integration, refresh-token
+rotation and durable discussion APIs remain outside this foundation implementation.
