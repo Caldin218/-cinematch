@@ -23,7 +23,7 @@ from app.core.database import Base
 TABLES = {
     "users", "movies", "genres", "movie_genres", "ratings", "movie_views",
     "user_favorites", "watchlists", "outbox_events", "processed_events",
-    "recommendations", "refresh_tokens",
+    "recommendations", "recommendation_jobs", "refresh_tokens",
 }
 INDEXES = {
     "uq_genres_name_lower", "ix_movies_active_year", "ix_movies_active_title_prefix",
@@ -34,6 +34,7 @@ INDEXES = {
     "ix_outbox_events_aggregate", "ix_outbox_events_occurred", "ix_processed_events_event",
     "ix_recommendations_movie", "ix_refresh_tokens_user", "ix_refresh_tokens_family",
     "ix_refresh_tokens_expires",
+    "ix_recommendation_jobs_due",
 }
 pytestmark = [
     pytest.mark.integration,
@@ -136,7 +137,7 @@ def test_all_tables_types_constraints_and_indexes(migrated_engine):
         assert actual_uniques == expected_uniques
     assert explicit_indexes == INDEXES
     with migrated_engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0003_event_envelope"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0004_recommendation_jobs"
         # Compare schema types, nullable flags, FKs, indexes and server defaults.
         context = MigrationContext.configure(connection, opts={"compare_server_default": True})
         assert compare_metadata(context, Base.metadata) == []

@@ -212,4 +212,19 @@ Phase 8 adds durable consumer retries, dead-letter quarantine, active-entry hear
 
 ## Phase 9 recommendation engine
 
-Implemented sparse user-based CF, Bayesian popularity, hybrid ranking, cold-start fallback and temporal MovieLens evaluation. See [algorithm contracts and usage](docs/RECOMMENDATION.md#phase-9--implemented-engine-2026-11-15). API/worker integration remains Phase 10. No new dependencies or migration.
+Implemented sparse user-based CF, Bayesian popularity, hybrid ranking, cold-start fallback and temporal MovieLens evaluation. See [algorithm contracts and usage](docs/RECOMMENDATION.md#phase-9--implemented-engine-2026-11-15). Phase 10 integrates these algorithms below.
+
+## Phase 10 recommendation integration
+
+Authenticated `GET /api/v1/recommendations/me` and `POST /api/v1/recommendations/refresh`
+serve Top-N results and schedule refresh (`202`). Events schedule durable jobs with
+configurable batching. A separate worker persists hybrid results and generation
+metadata; Redis provides validated cache-aside with TTL and PostgreSQL fallback.
+Rated movies are filtered on every read.
+
+Apply Alembic head `0004_recommendation_jobs` before use. Run
+`docker compose --profile workers up -d --build` for all three roles, or locally
+from backend `.\.venv\Scripts\python -m app.events.worker recommendations`
+alongside publisher/consumer. See [freshness and consistency](docs/RECOMMENDATION.md)
+and [API contracts](docs/API.md). Defaults: 5-second batching, 300-second cache TTL.
+No new dependencies. Development database migration/deployment remains explicit.

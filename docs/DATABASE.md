@@ -239,3 +239,12 @@ users.interaction_version is a nonnegative BIGINT defaulting to zero, incremente
 Apply `python -m alembic upgrade head` from backend before running the updated application; ORM user reads require the new column. Tests cover empty upgrade, metadata comparison, upgrade with existing integer data, compatible downgrade/re-upgrade, and downgrade rejection. Downgrade to 0001 is refused if fractional/sub-1 ratings, sub-1 recommendation scores or a positive interaction sequence would lose data; it never silently rounds ratings or resets a live sequence. Back up retained databases and use a forward fix if interaction data exists. Startup does not migrate automatically.
 
 POST rating uses INSERT ON CONFLICT DO NOTHING and 409 for an existing pair. PUT updates the current row under the user lock, preserves created_at and updates updated_at with database clock_timestamp(). The same value is a no-op. View UUID retries reuse the existing row. Membership insert/delete uses PostgreSQL conflict/RETURNING operations to distinguish actual changes from repeats. For each actual change, state, user sequence and outbox event commit or roll back together. History derives from views; there is no duplicated watched table. Personal list queries join movie summaries in a fixed statement count; inactive summaries are retained.
+# Phase 10 schema addition
+
+Head: `0004_recommendation_jobs`. The new per-user `recommendation_jobs` table stores
+requested/completed revisions, batching deadline, expiring lease/token, retry state
+and last-success generation metadata. User FK cascades; a due index supports claims.
+`recommendations` adds `ranking_score` and `hybrid` with both component scores.
+Existing rows remain valid. Rows and completed metadata replace atomically; empty
+generations retain job metadata. Downgrade discards derived hybrid rows before
+restoring the old constraint, preserving user interactions and ratings.

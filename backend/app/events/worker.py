@@ -1,4 +1,4 @@
-"""Run with python -m app.events.worker publisher|consumer."""
+"""Run with python -m app.events.worker publisher|consumer|recommendations|replay."""
 import argparse
 import logging
 import signal
@@ -13,11 +13,12 @@ from app.events.consumer import EventConsumer
 from app.events.health import serve_status
 from app.events.publisher import STREAM, OutboxPublisher
 from app.events.reliability import RetryPolicy
+from app.modules.recommendations.worker import RecommendationWorker
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("role", choices=["publisher", "consumer", "replay"])
+    parser.add_argument("role", choices=["publisher", "consumer", "replay", "recommendations"])
     parser.add_argument("--stream", default=STREAM)
     parser.add_argument("--group", default="recommendations-v1")
     parser.add_argument("--name", default=f"{socket.gethostname()}-{uuid4().hex}")
@@ -43,19 +44,26 @@ def main():
             cursor.execute("SET lock_timeout = '5s'")
         connection.commit()
     sessions = get_session_factory(engine)
-    worker = (OutboxPublisher(sessions, redis, args.stream) if args.role in {"publisher", "replay"}
-              else EventConsumer(sessions, redis, args.name, args.group, args.stream,
+    if args.role in {"publisher", "replay"}:
+        worker = OutboxPublisher(sessions, redis, args.stream)
+    elif args.role == "recommendations":
+        worker = RecommendationWorker(sessions, redis, settings)
+    else:
+        worker = EventConsumer(sessions, redis, args.name, args.group, args.stream,
                   claim_idle_ms=settings.worker_claim_idle_ms,
                   retry_policy=RetryPolicy(settings.worker_max_retries,
-                      settings.worker_retry_base_seconds, settings.worker_retry_max_seconds)))
-    health = serve_status(worker, settings.worker_health_port) if args.role == "consumer" else None
+                      settings.worker_retry_base_seconds, settings.worker_retry_max_seconds))
+    health = serve_status(worker, settings.worker_health_port) if args.role in {"consumer", "recommendations"} else None
     try:
         if args.role == "replay":
             OutboxPublisher(sessions, redis, args.stream).replay(args.event_id)
             return
         while not stop.is_set():
             try:
-                if args.role == "publisher":
+                if args.role == "recommendations":
+                    if not worker.run_one():
+                        stop.wait(0.5)
+                elif args.role == "publisher":
                     if not worker.publish_one():
                         stop.wait(0.5)
                 else:

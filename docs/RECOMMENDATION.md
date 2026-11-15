@@ -118,8 +118,7 @@ No model training is performed. Popularity favors established titles and can be 
 by repeated views. CF can have low coverage on sparse or cold profiles and ignores taste
 changes, metadata and diversity. Snapshot replacement requires memory and rebuild work.
 The MovieLens sample is old and filtered, so its results do not establish production quality.
-The existing recommendation table cannot represent hybrid outputs: Phase 10 must define
-and migrate that persistence contract before storing engine results.
+Phase 10 adds the hybrid persistence contract described below.
 
 
 Verified MovieLens run on 2026-11-15 (default parameters, K=10): 79,999 train ratings,
@@ -130,3 +129,74 @@ time split and cold users; this run does not prove hybrid superiority over popul
 No tuning or baseline comparison was performed. Dataset downloaded to OS temporary
 storage using PowerShell's certificate trust; Python urllib download failed certificate
 validation on this host. No certificate checks were disabled.
+
+## Phase 10 — event and API integration
+
+Flow: committed interaction + outbox → publisher → Redis Stream → event consumer →
+PostgreSQL job → calculation worker → PostgreSQL results → Redis cache-aside.
+Stream receipts and job scheduling commit together before ACK. Duplicate event
+delivery does not schedule twice for the same consumer group.
+
+Interaction events schedule their actor; catalog changes schedule all active users.
+Favorites/watchlists trigger recalculation without directly changing engine weights.
+Other users' ratings influence the next snapshot; they do not eagerly fan out to
+every user. Explicit refresh also schedules a job.
+
+### Scheduling and failures
+
+Jobs coalesce by user in a bounded batch window: the first event sets the deadline,
+and further events increment the revision without extending the pending deadline.
+Default `RECOMMENDATION_BATCH_SECONDS=5`; zero disables the wait. Continuous events
+cannot indefinitely postpone the deadline. Refresh returns after scheduling and
+optional cache invalidation. Calculations hold no scheduling row locks.
+
+Workers claim due jobs with `FOR UPDATE SKIP LOCKED`, a UUID lease token and
+`RECOMMENDATION_LEASE_SECONDS=300` expiry. Source queries use one REPEATABLE READ
+snapshot. Completion checks both token ownership and input revision. Superseded
+results are discarded, leaving work pending; expired workers cannot overwrite
+replacement work. Superseded calculations wait for the next configured batch window,
+preventing a tight recalculation loop under continuous interactions. Results and
+metadata replace the previous generation atomically, including successful empty
+generations. Errors preserve old results and retry
+indefinitely with exponential delays (2–256 seconds). Only exception classes are
+recorded. Lease expiry recovers crashes and failures during failure bookkeeping.
+
+Migration `0004_recommendation_jobs` adds durable jobs, metadata, `ranking_score`
+and the `hybrid` method. The engine's ranking score is [0,1]. For compatibility with
+existing storage, `popularity_score` is `0.5 + 4.5 * engine_popularity_score` on
+[0.5,5]; it is not a predicted rating. Hybrid rows retain both components. Version:
+`hybrid-cf-popularity-v1`. `generation_seconds` measures snapshot loading and
+calculation, excluding commit/cache I/O. `generated_at` and `source_cutoff` are UTC.
+Internal `/metrics` exposes generated/failed/superseded totals and cumulative
+generation seconds. Generation logs include duration and algorithm version.
+
+### Cache and freshness
+
+Keys: `recommendations:user:{user_id}`, TTL `RECOMMENDATION_CACHE_TTL=300`.
+JSON validates schema version, owner, completed revision, timestamps, score bounds,
+methods, finite duration, unique movies and contiguous ranks. Invalid/foreign/old
+entries are deleted and loaded from PostgreSQL. Redis read/write/delete failures
+fall back to PostgreSQL. Refresh and generation delete the key. Event scheduling
+logically invalidates it by advancing the authoritative PostgreSQL revision; dirty
+jobs bypass the cache. Delayed fills cannot hide newer generations because each
+read checks the revision. Redis is not required for refresh or calculation.
+
+Every response filters currently rated movies and inactive candidates in PostgreSQL,
+including cache hits. Exclusions can shorten Top-N until recalculation. Optional
+`n` is capped by `RECOMMENDATION_TOP_N` (default 10). Cold profiles use popularity.
+Before the first generation, GET schedules work and returns deterministic unrated
+catalog candidates with `status=unavailable`, a fallback explanation and null
+generation timestamps. Pending jobs with prior results return `status=stale` and
+their original metadata. Successful empty generations are `ready` with metadata.
+
+Recommendations are eventually consistent. Under light load, expected freshness is
+outbox/stream lag + up to 5 seconds batching + up to 0.5 seconds worker polling +
+snapshot/calculation time. Stream receipt polling may add about a second. This is
+not a latency guarantee: backlogs, supersession, failures or stopped workers extend
+it. TTL adds no extra five-minute delay because revisions bypass obsolete entries.
+`generated_at` describes the last completed generation, not the latest interaction.
+
+Limits: full sparse snapshot loading per job; O(active users) catalog fanout. Set
+the lease longer than normal calculation time to reduce duplicate work; fencing
+still protects writes. No hard CPU timeout, periodic global rebuild, job retention
+or autoscaling. Metrics reset on restart.

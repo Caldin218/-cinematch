@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     worker_retry_max_seconds: float = Field(default=300, gt=0)
     worker_claim_idle_ms: int = Field(default=60000, ge=100)
     worker_health_port: int = Field(default=9101, ge=1, le=65535)
+    recommendation_batch_seconds: float = Field(default=5, ge=0, le=3600)
+    recommendation_cache_ttl: int = Field(default=300, ge=1, le=86400)
+    recommendation_top_n: int = Field(default=10, ge=1, le=100)
+    recommendation_lease_seconds: int = Field(default=300, ge=10)
 
     @property
     def database_url(self) -> URL:

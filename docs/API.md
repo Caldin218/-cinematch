@@ -1,5 +1,24 @@
 # Implemented API
 
+## Phase 10 recommendation APIs
+
+Both require Bearer authentication and return `Cache-Control: no-store` with the
+existing `{ "data": ... }` envelope. Identity always comes from the access token.
+
+- `GET /api/v1/recommendations/me?n=10`: optional `n` is 1–100, capped by configured
+  Top-N. Returns `items` (`movie_id`, `rank`, `method`, `ranking_score`,
+  `predicted_rating`, `popularity_score`), `generated_at`, `source_cutoff`,
+  `algorithm_version`, `generation_seconds`, `status` (`ready`, `stale`,
+  `unavailable`) and nullable `fallback` explanation.
+- `POST /api/v1/recommendations/refresh`: `202 Accepted` with
+  `{ "data": { "status": "scheduled", "scheduled_for": "<UTC timestamp>" } }`
+  and `Location: /api/v1/recommendations/me`. Schedules/coalesces work without
+  running the engine. Poll GET for a completed generation.
+
+Rated/inactive movies are filtered even from cached results; lists may be shorter
+than N. Missing data uses labeled catalog fallback; stale results retain original
+metadata. See RECOMMENDATION.md for score scales, consistency and freshness.
+
 Health: GET /health (alias /health/live) returns {status:ok,checks:{}} independently of dependencies. GET /health/ready returns 200 ready or 503 not_ready with PostgreSQL/Redis checks. Versioned aliases exist under /api/v1. OpenAPI is available at /docs and /openapi.json. The frontend health proxy strips /api before forwarding.
 
 Phase 3 conventions: success uses {data:...}, pagination {items,page,page_size,total}, health retains {status,checks}. Errors use code/message/details/request_id. X-Request-ID accepts a UUID or generates one; validation errors omit raw input. Pagination bounds: page>=1, page_size 1-100.

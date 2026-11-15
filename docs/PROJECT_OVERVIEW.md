@@ -49,3 +49,8 @@ This sequence is a proposal for future phase instructions, not authorization to 
 - Account deletion/export and jurisdiction-specific retention obligations require a later explicit policy decision before public release. MVP supports account suspension and session revocation.
 
 Detailed security, permission, testing and acceptance contracts are in REQUIREMENTS.md. ARCHITECTURE.md defines API modules, entities, event semantics, recommendation math and deployment.
+# Phase 10 status
+
+Recommendation integration includes transactional scheduling, bounded batching,
+worker leases/retries, hybrid persistence, validated Redis cache-aside and
+authenticated asynchronous refresh/read APIs. See RECOMMENDATION.md for freshness.

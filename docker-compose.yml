@@ -41,6 +41,10 @@ services:
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       APP_ENV: ${APP_ENV:-development}
       CORS_ORIGINS: ${CORS_ORIGINS:-[]}
+      RECOMMENDATION_BATCH_SECONDS: ${RECOMMENDATION_BATCH_SECONDS:-5}
+      RECOMMENDATION_CACHE_TTL: ${RECOMMENDATION_CACHE_TTL:-300}
+      RECOMMENDATION_TOP_N: ${RECOMMENDATION_TOP_N:-10}
+      RECOMMENDATION_LEASE_SECONDS: ${RECOMMENDATION_LEASE_SECONDS:-300}
     ports:
       - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
     depends_on:
@@ -74,6 +78,10 @@ services:
       timeout: 5s
       retries: 6
     stop_grace_period: 30s
+  recommendation-worker:
+    profiles: [workers]
+    extends: event-consumer
+    command: ["python", "-m", "app.events.worker", "recommendations"]
   frontend:
     build: ./frontend
     ports:

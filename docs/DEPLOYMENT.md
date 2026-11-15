@@ -19,3 +19,17 @@ Downgrade is intentionally guarded: existing fractional/sub-1 ratings, sub-1 rec
 ## Phase 7 worker operations
 
 Apply migration 0003 before starting the workers. Run `docker compose --profile workers up -d outbox-publisher event-consumer` to supervise independent workers. See [EVENT_FLOW.md](EVENT_FLOW.md) for contracts, duplicate handling, Redis-loss replay, shutdown and retention limitations. Do not run API containers built before migration 0003 alongside new workers during event-name migration; coordinate deployment to avoid legacy event names being written after normalization.
+# Phase 10 operation
+
+Rebuild images, then apply head before starting workers:
+`docker compose run --rm backend python -m alembic upgrade head` followed by
+`docker compose --profile workers up -d --build`. This starts publisher, consumer
+and recommendation worker. Locally from backend:
+`.\.venv\Scripts\python -m app.events.worker recommendations`.
+Use distinct `WORKER_HEALTH_PORT` values for local roles; containers each use 9101.
+Internal `/health` and `/metrics` use the existing worker status server.
+
+Compose forwards `RECOMMENDATION_BATCH_SECONDS` (5), `RECOMMENDATION_CACHE_TTL`
+(300), `RECOMMENDATION_TOP_N` (10), `RECOMMENDATION_LEASE_SECONDS` (300) to API and
+workers. No new dependencies. Tests migrate disposable databases; development
+migration/deployment remains explicit. See RECOMMENDATION.md for operational limits.

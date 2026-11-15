@@ -1,23 +1,24 @@
-from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.health import router
 from app.core.config import Settings, get_settings
+from app.core.correlation import CorrelationMiddleware
 from app.core.database import create_database_engine, get_session_factory
+from app.core.errors import install_handlers
 from app.core.health import HealthService
 from app.core.logging import configure_logging
 from app.core.redis import create_redis_client
 from app.core.runtime import create_async_resources
-from app.core.errors import install_handlers
-from app.core.correlation import CorrelationMiddleware
 from app.modules.auth.router import router as auth_router
-from app.modules.users.router import router as users_router
-from app.modules.movies.router import router as movies_router
 from app.modules.genres.router import router as genres_router
 from app.modules.interactions.router import router as interactions_router
+from app.modules.movies.router import router as movies_router
+from app.modules.recommendations.router import router as recommendations_router
+from app.modules.users.router import router as users_router
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -63,6 +64,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(movies_router, prefix="/api/v1")
     app.include_router(genres_router, prefix="/api/v1")
     app.include_router(interactions_router, prefix="/api/v1")
+    app.include_router(recommendations_router, prefix="/api/v1")
     install_handlers(app)
     app.add_middleware(CorrelationMiddleware)
     app.include_router(router)

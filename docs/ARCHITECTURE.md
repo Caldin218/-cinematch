@@ -450,3 +450,10 @@ sequenceDiagram
 ## Phase 9 recommendation engine
 
 `app/recommendation_engine` separates immutable sparse indexes and data adapters from popularity, centered similarity, lazy Top-K CF, hybrid ranking and offline evaluation. Engines are reused per snapshot; rebuild for changed input. SQL loading requires a caller-owned REPEATABLE READ transaction. No API, worker or persistence integration is added; see RECOMMENDATION.md for contracts and complexity.
+# Phase 10 integration
+
+Recommendations now have a router/service/repository/cache and separate computation
+worker within the modular monolith. Stream handlers schedule durable work without
+running predictions. PostgreSQL revisions and leases coordinate concurrent workers;
+Redis is an optional response cache. Read-time eligibility checks exclude rated
+movies while asynchronous events catch up. See RECOMMENDATION.md for consistency.

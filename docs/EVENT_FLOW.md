@@ -112,3 +112,12 @@ Consumers expose GET /health and /metrics on WORKER_HEALTH_PORT (default 9101, i
 5. For shutdown, send SIGTERM and allow at least the configured Compose 30-second grace period. Investigate handlers exceeding database bounds; forced termination is recovered through the PEL and transactional receipts.
 
 Failure-injection integration tests use disposable migrated PostgreSQL databases and isolated Redis stream names: `$env:RUN_INTEGRATION='1'; backend/.venv/Scripts/python -m pytest -q backend/tests/test_events.py` from the repository root. They inject handler/commit/ACK failures, Redis and PostgreSQL unavailability, restart, duplicate delivery, long-running handlers, backoff and retry exhaustion. Services themselves are not stopped and configured application data is not modified.
+# Phase 10 recommendation scheduling
+
+Interaction routes now coalesce the actor's durable recommendation job instead of
+deleting persisted results. Catalog events schedule all active users. Job upserts
+and event receipts commit together before ACK. The separate `recommendations`
+worker calculates and atomically persists results. Lease token/revision fencing
+rejects superseded work. Cache revision checks provide logical invalidation when
+Redis cannot delete keys. Manual refresh uses the same PostgreSQL scheduling path
+without Redis Streams. See RECOMMENDATION.md for batching, failures and freshness.

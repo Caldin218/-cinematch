@@ -80,3 +80,14 @@ Keep processed_events uniqueness scoped to (consumer_group, event_id), preservin
 ## Phase 9 — 2026-11-15
 
 Use sparse standard-library dictionaries instead of adding numerical libraries for this small explicit-rating workload. Use Bayesian popularity, overlap-shrunk mean-centered positive cosine neighbors, and fixed-scale normalized hybrid scoring. Use global chronological evaluation to avoid cross-user future leakage. Keep hybrid scores out of the legacy recommendation table pending a Phase 10 contract/migration. Cache neighbors only within a reused snapshot; replace engines after refresh.
+
+## Phase 10 - durable recommendation jobs
+
+Use a PostgreSQL coalescing job per user, committed with the event receipt, so
+acknowledged work survives Redis outages. Bounded batching avoids indefinitely
+moving deadlines. Short claims and leases let refresh schedule during calculation;
+token/revision fencing prevents old workers from replacing newer results. Retain
+previous generations on failure, including metadata for successful empty results.
+Cache-aside checks durable revisions in addition to TTL and deletion to handle
+fills racing with invalidation. Read-time eligibility excludes rated movies while
+the event pipeline catches up. See RECOMMENDATION.md for contracts and limitations.

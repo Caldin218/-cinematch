@@ -441,3 +441,63 @@ Integration tests requiring RUN_INTEGRATION=1 were not run; SQL adapter mapping 
 Limitations: cold/sparse profiles reduce CF coverage; no production quality claim or tuned baseline comparison.
 Neighbor cache belongs to a snapshot and requires engine replacement after updates. No historical database replay.
 Next: Phase 10 API/worker integration and an explicit migration for hybrid persistence; no such schema/API changes in Phase 9.
+
+## Phase 10 - recommendation integration - 2026-11-15
+
+Implemented PostgreSQL-backed per-user scheduling from Redis Stream events and
+manual refresh, bounded configurable batching, lease/revision fencing, retry with
+previous-generation preservation, hybrid persistence, generation duration/version,
+and validated namespaced Redis cache-aside. API reads exclude currently rated and
+inactive movies even before the event consumer catches up. Cold-start and missing
+recommendation data have explicit fallback behavior.
+
+Acceptance checklist:
+- [x] Interaction actor identification and catalog fanout; scheduling shares event receipt transaction.
+- [x] Durable batched refresh returns 202 without engine execution.
+- [x] Concurrent upserts, exclusive expiring claims, stale-worker and revision fencing.
+- [x] Batching also spaces superseded calculations under continuous interactions.
+- [x] Atomic result/metadata replacement; empty generations; failure preservation/retries.
+- [x] Cache hit/miss, TTL, explicit and logical invalidation, corruption validation and outage fallback.
+- [x] Top-N, current rated/inactive exclusions, popularity cold start and labeled catalog fallback.
+- [x] Eventual consistency, freshness expectations, score scales, deployment and limits documented.
+- [ ] User phase acceptance.
+
+Created: app/modules/recommendations/{scheduling,worker,cache,schemas,repository,service,router,__init__}.py,
+alembic/versions/0004_recommendation_jobs.py and tests/test_recommendations.py.
+Updated: models/registry, settings, event handlers/worker CLI, application routers,
+schema/model/migration regression expectations, .env.example and Compose; README,
+API, architecture, database, deployment, events, recommendations, decisions,
+project overview and this progress checklist. No new dependencies.
+
+Verification commands from repository root:
+- RUN_INTEGRATION=1 backend/.venv/Scripts/python -m pytest -q backend/tests --tb=short:
+  156 passed in 431.44 seconds. This full run preceded the last added lease/batching
+  edge tests and the batching refinement; final targeted verification follows below.
+- RUN_INTEGRATION=1 backend/.venv/Scripts/python -m pytest -q backend/tests/test_recommendations.py
+  backend/tests/test_database_schema.py backend/tests/test_interaction_migration.py:
+  65 passed in 86.83 seconds at the initial integration checkpoint.
+- backend/.venv/Scripts/python -m pytest -q backend/tests: final default run
+  49 passed, 110 skipped in 5.37 seconds (real-service tests intentionally skipped).
+- Scoped Ruff, configured mypy (nine new/modified recommendation modules), compileall,
+  git diff --check and docker compose --profile workers config --quiet passed.
+- One existing Starlette/httpx deprecation warning remains.
+
+An early in-flight verification failed while migration/check expectations were still
+being edited (Alembic constraint naming and head revision); these were corrected and
+subsequent schema/integration and full regression runs passed.
+
+Limits: full sparse snapshot per user job, catalog fanout O(active users), no periodic
+global rebuild or hard calculation timeout. Peer interactions affect another user's
+next refresh rather than eagerly refreshing every user. Lease size should exceed
+normal compute time. Metrics are process-local. Development database and live Docker
+services were not migrated/rebuilt automatically; apply head before deployment.
+
+Final post-refinement verification: RUN_INTEGRATION=1 backend/.venv/Scripts/python
+-m pytest -q backend/tests/test_recommendations.py
+backend/tests/test_events.py::test_worker_signal_finishes_and_closes --tb=short:
+**17 passed in 92.01 seconds**, including continuous-interaction batch spacing,
+Redis-outage refresh, event invalidation, concurrent scheduling, lease replacement,
+calculation failures, true hybrid persistence and API cache/rating behavior. Scoped
+Ruff and mypy were rerun after the batching refinement and passed; final compileall
+and diff whitespace verification passed. Phase 10 implementation is complete;
+no next-phase work was started.
