@@ -10,7 +10,9 @@ from app.core.config import get_settings
 from app.core.database import create_database_engine, get_session_factory
 from app.core.redis import create_redis_client
 from app.events.consumer import EventConsumer
+from app.events.health import serve_status
 from app.events.publisher import STREAM, OutboxPublisher
+from app.events.reliability import RetryPolicy
 
 
 def main():
@@ -42,7 +44,11 @@ def main():
         connection.commit()
     sessions = get_session_factory(engine)
     worker = (OutboxPublisher(sessions, redis, args.stream) if args.role in {"publisher", "replay"}
-              else EventConsumer(sessions, redis, args.name, args.group, args.stream))
+              else EventConsumer(sessions, redis, args.name, args.group, args.stream,
+                  claim_idle_ms=settings.worker_claim_idle_ms,
+                  retry_policy=RetryPolicy(settings.worker_max_retries,
+                      settings.worker_retry_base_seconds, settings.worker_retry_max_seconds)))
+    health = serve_status(worker, settings.worker_health_port) if args.role == "consumer" else None
     try:
         if args.role == "replay":
             OutboxPublisher(sessions, redis, args.stream).replay(args.event_id)
@@ -58,6 +64,9 @@ def main():
                 logging.error("worker_retry role=%s error=%s", args.role, type(error).__name__)
                 stop.wait(2)
     finally:
+        if health:
+            health.shutdown()
+            health.server_close()
         redis.close()
         engine.dispose()
         logging.info("worker_stopped role=%s", args.role)

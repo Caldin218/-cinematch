@@ -388,3 +388,25 @@ Changed in remediation: event schema/factory, publisher replay, CLI replay, hand
 Full backend integration regression after fixes: **114 passed, 1 upstream Starlette/httpx deprecation warning, 303.08 seconds**. Two subsequently added tests (signal cleanup and ambiguous XADD confirmation) are included in the final **15/15** event suite above. No application behavior changed after the full run beyond type annotations/producer factory cleanup, which the final event suite covers; interaction/catalog functional tests also completed successfully in the full run. All collected full-suite tests passed; no skipped integration tests in that run.
 
 Acceptance: **Phase 7 functional acceptance criteria verified with documented operational limitations**. No next-phase work started. Production throughput, OS kill under a stalled connection, automated quarantine and strict whole-backend typing remain outside this verification. Phase 6 audit findings remain open independently.
+
+## Phase 8 — reliable background workers — 2026-11-15
+
+Implemented consumer group recreation, XREADGROUP/commit-before-ACK, bounded PEL cursor recovery, active-message heartbeat, durable configurable exponential retry policies, dead-letter stream with atomic quarantine/ACK, transactional event-id deduplication, signal shutdown, HTTP health and Prometheus-compatible consumer metrics. Added failure-injection integration coverage and EVENT_FLOW recovery procedures. No database schema changes or new dependencies.
+
+Files: consumer.py, new reliability.py/health.py, worker.py, config.py, test_events.py, .env.example, docker-compose.yml, README and event/decision/progress docs. Existing Phase 6 audit findings remain open.
+
+Validation: initial existing event suite 15 passed; expanded failure suite 21 passed with real PostgreSQL/Redis. Scoped Ruff, backend-configured mypy (8 modules) and compilation passed. A root-directory mypy invocation initially missed the backend Pydantic plugin settings and reported four Settings constructor errors; rerun from backend passed. Final expanded event and full regression results follow.
+
+Limits: standalone Redis only; process-local metrics reset on restart; Redis persistence loss requires retained-outbox replay; no automatic retention; arbitrary non-database Python handlers have no hard shutdown bound; external effects need their own idempotency. Service outages are injected at client boundaries while using real services for recovery, without stopping shared services.
+
+Final targeted verification: `$env:RUN_INTEGRATION='1'; backend/.venv/Scripts/python -m pytest -q backend/tests/test_events.py` — **23 passed in 118.43 seconds**, including consumer commit-failure and live HTTP health/metrics tests. `backend/.venv/Scripts/python -m ruff check backend/app/events backend/tests/test_events.py` and `... -m compileall -q backend/app backend/tests` passed; from backend, `.venv/Scripts/python -m mypy app/events` passed (8 source files). `docker compose --profile workers config --quiet` succeeded with Docker-config access warnings; no image rebuild or live worker deployment is claimed.
+
+Full backend regression: `$env:RUN_INTEGRATION='1'; backend/.venv/Scripts/python -m pytest -q backend/tests` — **124 passed, 1 existing Starlette/httpx deprecation warning in 367.34 seconds**. The final targeted event run additionally verifies the final infrastructure-backoff metadata change made while the full run was underway.
+
+Phase 8 acceptance checklist:
+- [x] Group management, commit-before-ACK and transactionally idempotent handlers.
+- [x] PEL monitoring, stale recovery and long-running heartbeat.
+- [x] Configurable bounded handler retries, exponential backoff and atomic dead-letter quarantine.
+- [x] Graceful admission stop, internal worker health and all six requested metrics.
+- [x] Failure-injection integration tests, full backend regression and recovery documentation.
+- [ ] User phase acceptance; no Phase 9 work started.

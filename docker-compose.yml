@@ -69,7 +69,10 @@ services:
     command: ["python", "-m", "app.events.worker", "consumer"]
     ports: !reset []
     healthcheck:
-      disable: true
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9101/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
     stop_grace_period: 30s
   frontend:
     build: ./frontend

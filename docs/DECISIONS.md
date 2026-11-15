@@ -72,3 +72,7 @@ Use maintained argon2-cffi, PyJWT and email-validator for hashing/JWT/email vali
 - Serialize writes per user, using a durable user interaction_version for outbox order. Add an Alembic migration rather than repurposing timestamps or deriving versions from retained outbox rows. Lock active movies against concurrent deactivation. This intentionally trades same-user throughput for simple correct transactions.
 - Keep private history/collection summaries after catalog soft deletion and allow membership removal. New interactions require an active movie; retrying an existing view UUID returns its prior result.
 - Append pending outbox events now; do not publish directly to Redis or introduce workers before the requested event-processing phase. Genre/catalog events retain their existing separate aggregate contracts.
+
+## Phase 8 — reliable consumers (2026-11-15)
+
+Keep processed_events uniqueness scoped to (consumer_group, event_id), preserving independent group delivery. Use Redis-owned per-entry retry metadata, PEL idle heartbeats and ownership-checked Lua quarantine/ACK on standalone Redis. Infrastructure outages retain pending work indefinitely with bounded exponential delay; deterministic invalid messages quarantine immediately and handler exceptions exhaust a configurable retry budget. PostgreSQL effects and receipts remain one transaction. No schema change.

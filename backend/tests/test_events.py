@@ -84,11 +84,13 @@ def test_publish_restart_outage_replay_and_dedup(infra):
     consumer = EventConsumer(sessions, redis, "one", stream=stream,
         handlers={"movie.favorite_added": lambda session, event: effects.append(event.event_id)})
     consumer.poll()
+    consumer.poll()
     assert effects == [identifier]
     assert redis.xpending(stream, consumer.group)["pending"] == 0
     # Lost stream recovery retains PostgreSQL as authority and receipts deduplicate replay.
     redis.delete(stream)
     publisher.replay(identifier)
+    consumer.poll()
     consumer.poll()
     assert effects == [identifier]
 
@@ -148,14 +150,14 @@ def test_multiple_consumers_and_ack_failure(infra):
     workers = [EventConsumer(sessions, redis, str(i), stream=stream) for i in range(2)]
     workers[0].ensure_group()
     with ThreadPoolExecutor(max_workers=2) as pool:
-        list(pool.map(lambda worker: worker.poll(), workers))
+        list(pool.map(lambda worker: [worker.poll() for _ in range(4)], workers))
     with sessions() as session:
         assert all(session.get(ProcessedEvent, (workers[0].group, identifier)) for identifier in identifiers)
     assert redis.xpending(stream, workers[0].group)["pending"] == 0
     publisher.replay(identifiers[0])
     message = redis.xreadgroup(workers[0].group, "ack-fail", {stream: ">"})[0][1][0]
     failing = Mock(wraps=redis)
-    failing.xack.side_effect = ConnectionError("ACK lost")
+    failing.eval.side_effect = ConnectionError("ACK lost")
     worker = EventConsumer(sessions, failing, "ack-fail", stream=stream)
     with pytest.raises(ConnectionError):
         worker.process(*message)
@@ -212,3 +214,154 @@ def test_ambiguous_xadd_timeout_retries_same_identity(infra):
     messages = redis.xrange(stream)
     assert len(messages) == 2
     assert all(EventEnvelope.model_validate_json(fields["event"]).event_id == identifier for _, fields in messages)
+
+
+def test_invalid_event_goes_to_dead_stream(infra):
+    import json
+    _, sessions, redis, stream = infra
+    redis.xadd(stream, {"event": "not-json"})
+    worker = EventConsumer(sessions, redis, "invalid", stream=stream)
+    worker.poll()
+    dead = redis.xrange(stream + ":dead")
+    assert len(dead) == 1
+    assert json.loads(dead[0][1]["fields"]) == {"event": "not-json"}
+    assert redis.xpending(stream, worker.group)["pending"] == 0
+    redis.delete(stream + ":dead")
+
+
+def test_retry_backoff_restart_and_exhaustion(infra):
+    from app.events.reliability import RetryPolicy
+    _, sessions, redis, stream = infra
+    identifier = seed(sessions)
+    OutboxPublisher(sessions, redis, stream).publish_one()
+    calls = []
+    def broken(session, incoming):
+        calls.append(1)
+        session.execute(update(OutboxEvent).where(OutboxEvent.id == identifier).values(last_error="rollback"))
+        raise RuntimeError("poison")
+    def worker(name):
+        return EventConsumer(sessions, redis, name, stream=stream, claim_idle_ms=0,
+            handlers={"movie.favorite_added": broken}, retry_policy=RetryPolicy(2, 10, 40))
+    first = worker("first")
+    first.poll()
+    entry = redis.xrange(stream)[0][0]
+    key = first.state_key(entry)
+    assert redis.hget(key, "failures") == "1"
+    worker("early").poll()
+    assert len(calls) == 1
+    for name in ["restart", "exhaust"]:
+        redis.hset(key, "due", 0)
+        worker(name).poll()
+    assert len(calls) == 3
+    assert len(redis.xrange(stream + ":dead")) == 1
+    assert redis.xpending(stream, first.group)["pending"] == 0
+    with sessions() as session:
+        assert session.get(ProcessedEvent, (first.group, identifier)) is None
+        assert session.get(OutboxEvent, identifier).last_error is None
+    redis.delete(stream + ":dead")
+
+
+def test_database_outage_preserves_retry_budget(infra):
+    from sqlalchemy.exc import OperationalError
+    _, sessions, redis, stream = infra
+    seed(sessions)
+    OutboxPublisher(sessions, redis, stream).publish_one()
+    offline = Mock()
+    offline.begin.side_effect = OperationalError("connect", {}, Exception("offline"))
+    worker = EventConsumer(offline, redis, "offline", stream=stream)
+    worker.poll()
+    entry = redis.xrange(stream)[0][0]
+    assert redis.hget(worker.state_key(entry), "failures") == "0"
+    assert redis.xpending(stream, worker.group)["pending"] == 1
+    assert not worker.status()["healthy"]
+    redis.hset(worker.state_key(entry), "due", 0)
+    EventConsumer(sessions, redis, "recovered", stream=stream, claim_idle_ms=0).poll()
+    assert redis.xpending(stream, worker.group)["pending"] == 0
+
+
+def test_dead_letter_outage_does_not_ack(infra):
+    _, sessions, redis, stream = infra
+    redis.xadd(stream, {"event": "invalid"})
+    failing = Mock(wraps=redis)
+    failing.eval.side_effect = ConnectionError("Redis unavailable")
+    worker = EventConsumer(sessions, failing, "offline", stream=stream)
+    with pytest.raises(ConnectionError):
+        worker.poll()
+    assert redis.xpending(stream, worker.group)["pending"] == 1
+    EventConsumer(sessions, redis, "restore", stream=stream, claim_idle_ms=0).poll()
+    assert redis.xpending(stream, worker.group)["pending"] == 0
+    redis.delete(stream + ":dead")
+
+
+def test_long_running_handler_heartbeat(infra):
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+    _, sessions, redis, stream = infra
+    seed(sessions)
+    OutboxPublisher(sessions, redis, stream).publish_one()
+    entered, release = Event(), Event()
+    def slow(session, incoming):
+        entered.set()
+        assert release.wait(5)
+    worker = EventConsumer(sessions, redis, "slow", stream=stream, claim_idle_ms=150,
+        handlers={"movie.favorite_added": slow})
+    with ThreadPoolExecutor() as pool:
+        future = pool.submit(worker.poll)
+        try:
+            assert entered.wait(5)
+            time.sleep(0.4)
+            claimed = redis.xautoclaim(stream, worker.group, "competitor", 150, "0-0")
+            assert claimed[1] == []
+        finally:
+            release.set()
+        future.result()
+    assert redis.xpending(stream, worker.group)["pending"] == 0
+
+
+def test_exponential_retry_policy():
+    from app.events.reliability import RetryPolicy
+    policy = RetryPolicy(5, 2, 10)
+    assert [policy.delay(i) for i in range(1, 6)] == [2, 4, 8, 10, 10]
+
+
+def test_consumer_commit_failure_never_acknowledges(infra):
+    _, sessions, redis, stream = infra
+    identifier = seed(sessions)
+    OutboxPublisher(sessions, redis, stream).publish_one()
+    worker = EventConsumer(sessions, redis, "commit-fail", stream=stream)
+    def crash(session):
+        raise RuntimeError("commit failure")
+    event.listen(sessions, "before_commit", crash)
+    try:
+        worker.poll()
+    finally:
+        event.remove(sessions, "before_commit", crash)
+    assert redis.xpending(stream, worker.group)["pending"] == 1
+    with sessions() as session:
+        assert session.get(ProcessedEvent, (worker.group, identifier)) is None
+    entry = redis.xrange(stream)[0][0]
+    redis.hset(worker.state_key(entry), "due", 0)
+    EventConsumer(sessions, redis, "restart", stream=stream, claim_idle_ms=0).poll()
+    assert redis.xpending(stream, worker.group)["pending"] == 0
+
+
+def test_health_and_metrics_endpoint():
+    import json
+    from urllib.request import urlopen
+
+    from app.events.health import serve_status
+    worker = EventConsumer(Mock(), Mock(), "health")
+    worker.healthy = True
+    server = serve_status(worker, 0)
+    try:
+        address = f"http://127.0.0.1:{server.server_port}"
+        with urlopen(address + "/health") as response:
+            assert json.load(response)["healthy"] is True
+        with urlopen(address + "/metrics") as response:
+            metrics = response.read().decode()
+            assert "processed_total 0" in metrics
+            assert "processing_duration 0.0" in metrics
+    finally:
+        server.shutdown()
+        server.server_close()

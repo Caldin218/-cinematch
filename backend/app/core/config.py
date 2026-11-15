@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     access_token_minutes: int = Field(default=15, ge=1, le=60)
     refresh_token_days: int = Field(default=7, ge=1, le=30)
 
+    worker_max_retries: int = Field(default=5, ge=0)
+    worker_retry_base_seconds: float = Field(default=2, gt=0)
+    worker_retry_max_seconds: float = Field(default=300, gt=0)
+    worker_claim_idle_ms: int = Field(default=60000, ge=100)
+    worker_health_port: int = Field(default=9101, ge=1, le=65535)
+
     @property
     def database_url(self) -> URL:
         return URL.create(

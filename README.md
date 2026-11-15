@@ -207,3 +207,5 @@ Authenticated rating creation/update (0.50-5.00 exact decimals), UUID-deduplicat
 Before running the updated backend, apply the new migration from backend: `.\.venv\Scripts\python -m alembic upgrade head` (Windows), followed by `.\.venv\Scripts\python -m alembic check`. Current head: 0002_interactions. For local async serving, `.\.venv\Scripts\python -m app.run`. Back up retained data first; downgrade rejects data it cannot preserve. Rebuild Docker images before using their application/migration commands.
 
 Verify from repository root in PowerShell: `$env:RUN_INTEGRATION='1'; .\backend\.venv\Scripts\python -m pytest -q backend/tests`. Tests use real PostgreSQL/Redis and disposable migrated databases. Watched history currently means recorded view observations; there is no separate completion/unwatch API.
+
+Phase 8 adds durable consumer retries, dead-letter quarantine, active-entry heartbeats and internal worker health/metrics. See [event recovery procedures](docs/EVENT_FLOW.md#phase-8-consumer-reliability).
